@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Action RPG - Prototype</title>
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div id="crosshair"></div>
+
+<!-- 左上：ステータスHUD（ZZZ風ベース） -->
+<div id="hud-top-left" class="hud-panel">
+  <div class="lv-badge">Lv.<span id="hud-lv">1</span></div>
+  <div class="bars">
+    <div class="bar-wrap hp-wrap">
+      <div id="hud-hp-bar" class="bar-fill hp-fill"></div>
+      <span id="hud-hp-text" class="bar-label">HP 100 / 100</span>
+    </div>
+    <div class="bar-wrap gauge-wrap">
+      <div id="hud-gauge-bar" class="bar-fill gauge-fill"></div>
+      <span id="hud-gauge-text" class="bar-label">ExS 0%</span>
+    </div>
+  </div>
+</div>
+
+<!-- 右上：FPS・デバッグ情報 -->
+<div id="hud-top-right" class="hud-panel">
+  <div>FPS: <span id="fps-value">0</span></div>
+  <div id="action-status" class="status-text">待機中</div>
+</div>
+
+<!-- 右下：アクションアイコン（ZZZ風丸型スロット） -->
+<div id="hud-bottom-right">
+  <div class="skill-slot" id="slot-dodge">
+    <span class="key-hint">Shift / 右ｸﾘｯｸ</span>
+    <span class="slot-icon">回避</span>
+    <span class="slot-cd" id="cd-dodge">READY</span>
+  </div>
+  <div class="skill-slot" id="slot-skill">
+    <span class="key-hint">E</span>
+    <span class="slot-icon">斬撃</span>
+    <span class="slot-cd" id="cd-skill">READY</span>
+  </div>
+  <div class="skill-slot exs-slot" id="slot-exs">
+    <span class="key-hint">Z</span>
+    <span class="slot-icon">ExS</span>
+    <span class="slot-cd" id="cd-exs">0%</span>
+  </div>
+</div>
+
+<!-- 操作ガイド（画面クリックで非表示化） -->
+<div id="lock-overlay">
+  <div class="overlay-box">
+    <h2>画面をクリックして操作開始</h2>
+    <p>WASD: 移動 / マウス: 視点回転 / Space: ジャンプ</p>
+    <p>左クリック: 通常攻撃（ブロック破壊可能） / Shift or 右クリック: 回避ダッシュ / E: スキル</p>
+    <p class="sub-note">※ESCキーでマウスカーソルを解除します</p>
+  </div>
+</div>
+
+<!-- Three.js (ES Module) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
