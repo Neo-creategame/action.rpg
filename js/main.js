@@ -66,6 +66,7 @@ const cdExs = document.getElementById('cd-exs');
 function updateHud(now) {
   const w = state.weapon;
   const mHp = maxHp();
+  if (player.hp > mHp) player.hp = mHp;
 
   lvSpan.textContent = PLAYER.lv;
   hpBar.style.width = `${(player.hp / mHp) * 100}%`;
