@@ -3,12 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3D Action RPG - Prototype</title>
+<title>3D Action RPG - Phase 2</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
 
 <div id="crosshair"></div>
+<div id="toast-container"></div>
 
 <!-- 左上：ステータスHUD（ZZZ風ベース） -->
 <div id="hud-top-left" class="hud-panel">
@@ -18,14 +20,34 @@
       <div id="hud-hp-bar" class="bar-fill hp-fill"></div>
       <span id="hud-hp-text" class="bar-label">HP 100 / 100</span>
     </div>
-    <div class="bar-wrap gauge-wrap">
-      <div id="hud-gauge-bar" class="bar-fill gauge-fill"></div>
-      <span id="hud-gauge-text" class="bar-label">ExS 0%</span>
+    <div class="bar-wrap exp-wrap">
+      <div id="hud-exp-bar" class="bar-fill exp-fill"></div>
+    </div>
+    <div id="hud-special-wrap" class="bar-wrap special-wrap hidden">
+      <div id="hud-special-bar" class="bar-fill special-fill"></div>
+      <span id="hud-special-text" class="bar-label">蒼焔 0 / 120</span>
+    </div>
+    <div class="stat-sub">
+      <span>ATK <b id="hud-atk">100</b></span>
+      <span>GOLD <b id="hud-gold">100</b>G</span>
     </div>
   </div>
 </div>
 
-<!-- 右上：FPS・デバッグ情報 -->
+<!-- 左下：装備武器・サブ武器表示 -->
+<div id="hud-bottom-left" class="hud-panel">
+  <div class="weapon-row main-wep">
+    <span class="tag">MAIN</span>
+    <span id="hud-main-wep">片手剣</span>
+    <span id="hud-main-dur" class="dur-text">100/100</span>
+  </div>
+  <div class="weapon-row sub-wep">
+    <span class="tag">SUB [X]</span>
+    <span id="hud-sub-wep">なし</span>
+  </div>
+</div>
+
+<!-- 右上：FPS・アクション状態 -->
 <div id="hud-top-right" class="hud-panel">
   <div>FPS: <span id="fps-value">0</span></div>
   <div id="action-status" class="status-text">待機中</div>
@@ -38,9 +60,14 @@
     <span class="slot-icon">回避</span>
     <span class="slot-cd" id="cd-dodge">READY</span>
   </div>
+  <div class="skill-slot" id="slot-q">
+    <span class="key-hint">Q</span>
+    <span class="slot-icon">衝撃波</span>
+    <span class="slot-cd" id="cd-q">READY</span>
+  </div>
   <div class="skill-slot" id="slot-skill">
     <span class="key-hint">E</span>
-    <span class="slot-icon">斬撃</span>
+    <span class="slot-icon" id="name-skill">回転斬り</span>
     <span class="slot-cd" id="cd-skill">READY</span>
   </div>
   <div class="skill-slot exs-slot" id="slot-exs">
@@ -50,17 +77,16 @@
   </div>
 </div>
 
-<!-- 操作ガイド（画面クリックで非表示化） -->
+<!-- 操作ガイド -->
 <div id="lock-overlay">
   <div class="overlay-box">
     <h2>画面をクリックして操作開始</h2>
     <p>WASD: 移動 / マウス: 視点回転 / Space: ジャンプ</p>
-    <p>左クリック: 通常攻撃（ブロック破壊可能） / Shift or 右クリック: 回避ダッシュ / E: スキル</p>
-    <p class="sub-note">※ESCキーでマウスカーソルを解除します</p>
+    <p>左クリック: 通常攻撃 / Shift・右クリック: 回避 / E: 武器スキル / Q: サブ・固有技 / Z: ExS大技</p>
+    <p class="sub-note">デバッグ切替: [1]片手剣 [2]弓 [3]無尾 [4]アポカリプス [5]アストラル [6]クロノス / [X] 武器交代</p>
   </div>
 </div>
 
-<!-- Three.js (ES Module) -->
 <script type="importmap">
 {
   "imports": {
