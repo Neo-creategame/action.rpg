@@ -12,7 +12,6 @@ body {
   color: #e8eaf0;
 }
 
-/* 中央レティクル */
 #crosshair {
   position: fixed;
   left: 50%;
@@ -22,7 +21,7 @@ body {
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 50;
-  opacity: 0.6;
+  opacity: 0.65;
 }
 #crosshair::before,
 #crosshair::after {
@@ -33,10 +32,9 @@ body {
 #crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
 #crosshair::after  { left: 0; top: 6px; width: 14px; height: 2px; }
 
-/* 共通HUDパネル */
 .hud-panel {
   position: fixed;
-  background: rgba(14, 16, 21, 0.82);
+  background: rgba(14, 16, 21, 0.85);
   border: 1px solid rgba(111, 182, 255, 0.35);
   border-radius: 8px;
   padding: 10px 14px;
@@ -55,8 +53,8 @@ body {
 }
 
 .lv-badge {
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   background: #1a202c;
   border: 2px solid #ffd36a;
@@ -66,13 +64,14 @@ body {
   font-weight: bold;
   font-size: 13px;
   color: #ffd36a;
+  flex-shrink: 0;
 }
 
 .bars {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 190px;
+  gap: 5px;
+  width: 205px;
 }
 
 .bar-wrap {
@@ -83,7 +82,9 @@ body {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.15);
 }
-.gauge-wrap { height: 10px; }
+.exp-wrap { height: 5px; }
+.special-wrap { height: 11px; }
+.hidden { display: none !important; }
 
 .bar-fill {
   height: 100%;
@@ -91,7 +92,8 @@ body {
   transition: width 0.12s ease-out;
 }
 .hp-fill { background: linear-gradient(90deg, #38a169, #68d391); }
-.gauge-fill { background: linear-gradient(90deg, #00b5d8, #00ffff); width: 0%; }
+.exp-fill { background: #4299e1; width: 0%; }
+.special-fill { background: linear-gradient(90deg, #00b5d8, #00ffff); width: 0%; }
 
 .bar-label {
   position: absolute;
@@ -104,7 +106,45 @@ body {
   text-shadow: 0 1px 2px #000;
 }
 
-/* 右上FPS・状態表示 */
+.stat-sub {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #cbd5e0;
+}
+.stat-sub b { color: #ffd36a; }
+
+/* 左下装備情報 */
+#hud-bottom-left {
+  left: 16px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+  font-size: 12px;
+}
+.weapon-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tag {
+  background: #2d3748;
+  color: #00ffff;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.sub-wep .tag { color: #a0aec0; }
+.dur-text {
+  margin-left: auto;
+  font-size: 11px;
+  color: #7cf0a0;
+}
+
+/* 右上FPS */
 #hud-top-right {
   top: 16px;
   right: 16px;
@@ -120,14 +160,14 @@ body {
   right: 24px;
   bottom: 24px;
   display: flex;
-  gap: 14px;
+  gap: 12px;
   pointer-events: none;
   z-index: 60;
 }
 
 .skill-slot {
-  width: 58px;
-  height: 58px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   background: rgba(14, 16, 21, 0.88);
   border: 2px solid #4a5568;
@@ -138,8 +178,8 @@ body {
   position: relative;
 }
 .exs-slot {
-  width: 64px;
-  height: 64px;
+  width: 66px;
+  height: 66px;
   border-color: #00ffff;
 }
 
@@ -151,9 +191,11 @@ body {
   white-space: nowrap;
 }
 .slot-icon {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: bold;
   color: #fff;
+  text-align: center;
+  line-height: 1.1;
 }
 .slot-cd {
   font-size: 10px;
@@ -162,11 +204,40 @@ body {
   margin-top: 2px;
 }
 
+/* 通知トースト */
+#toast-container {
+  position: fixed;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 90;
+}
+.toast-msg {
+  background: rgba(14, 16, 21, 0.88);
+  border: 1px solid #ffd36a;
+  color: #ffd36a;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: bold;
+  animation: fadeUp 1.4s ease-out forwards;
+}
+@keyframes fadeUp {
+  0%   { opacity: 1; transform: translateY(0); }
+  70%  { opacity: 1; transform: translateY(-12px); }
+  100% { opacity: 0; transform: translateY(-24px); }
+}
+
 /* クリック開始オーバーレイ */
 #lock-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(11, 13, 18, 0.72);
+  background: rgba(11, 13, 18, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -185,4 +256,4 @@ body {
 }
 .overlay-box h2 { color: #00ffff; margin-bottom: 10px; font-size: 20px; }
 .overlay-box p { font-size: 14px; }
-.overlay-box .sub-note { margin-top: 10px; font-size: 12px; color: #a0aec0; }
+.overlay-box .sub-note { margin-top: 10px; font-size: 12px; color: #ffd36a; }
