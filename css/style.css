@@ -1,0 +1,188 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+body {
+  overflow: hidden;
+  background: #0b0d12;
+  font-family: system-ui, "Hiragino Sans", "Yu Gothic", sans-serif;
+  color: #e8eaf0;
+}
+
+/* 中央レティクル */
+#crosshair {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.6;
+}
+#crosshair::before,
+#crosshair::after {
+  content: "";
+  position: absolute;
+  background: #00ffff;
+}
+#crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
+#crosshair::after  { left: 0; top: 6px; width: 14px; height: 2px; }
+
+/* 共通HUDパネル */
+.hud-panel {
+  position: fixed;
+  background: rgba(14, 16, 21, 0.82);
+  border: 1px solid rgba(111, 182, 255, 0.35);
+  border-radius: 8px;
+  padding: 10px 14px;
+  pointer-events: none;
+  z-index: 60;
+  backdrop-filter: blur(4px);
+}
+
+/* 左上ステータス */
+#hud-top-left {
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lv-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #1a202c;
+  border: 2px solid #ffd36a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 13px;
+  color: #ffd36a;
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 190px;
+}
+
+.bar-wrap {
+  position: relative;
+  height: 14px;
+  background: #1a202c;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.gauge-wrap { height: 10px; }
+
+.bar-fill {
+  height: 100%;
+  width: 100%;
+  transition: width 0.12s ease-out;
+}
+.hp-fill { background: linear-gradient(90deg, #38a169, #68d391); }
+.gauge-fill { background: linear-gradient(90deg, #00b5d8, #00ffff); width: 0%; }
+
+.bar-label {
+  position: absolute;
+  inset: 0;
+  font-size: 10px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 1px 2px #000;
+}
+
+/* 右上FPS・状態表示 */
+#hud-top-right {
+  top: 16px;
+  right: 16px;
+  font-size: 12px;
+  text-align: right;
+  line-height: 1.5;
+}
+.status-text { color: #00ffff; font-weight: bold; }
+
+/* 右下アクションスロット */
+#hud-bottom-right {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  gap: 14px;
+  pointer-events: none;
+  z-index: 60;
+}
+
+.skill-slot {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(14, 16, 21, 0.88);
+  border: 2px solid #4a5568;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.exs-slot {
+  width: 64px;
+  height: 64px;
+  border-color: #00ffff;
+}
+
+.key-hint {
+  position: absolute;
+  top: -16px;
+  font-size: 10px;
+  color: #a0aec0;
+  white-space: nowrap;
+}
+.slot-icon {
+  font-size: 13px;
+  font-weight: bold;
+  color: #fff;
+}
+.slot-cd {
+  font-size: 10px;
+  font-weight: bold;
+  color: #48bb78;
+  margin-top: 2px;
+}
+
+/* クリック開始オーバーレイ */
+#lock-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 13, 18, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  cursor: pointer;
+}
+#lock-overlay.hidden { display: none; }
+
+.overlay-box {
+  background: #161b26;
+  border: 2px solid #00ffff;
+  border-radius: 12px;
+  padding: 28px 36px;
+  text-align: center;
+  line-height: 1.8;
+}
+.overlay-box h2 { color: #00ffff; margin-bottom: 10px; font-size: 20px; }
+.overlay-box p { font-size: 14px; }
+.overlay-box .sub-note { margin-top: 10px; font-size: 12px; color: #a0aec0; }
