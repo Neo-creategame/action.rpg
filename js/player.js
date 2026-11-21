@@ -133,7 +133,7 @@ export class Player {
       if (e.code === 'KeyQ') this.triggerQSkill();
       if (e.code === 'KeyZ') this.triggerExS();
       if (e.code === 'KeyX') this.swapWeapon();
-      if (e.code === 'KeyF') this.tryInteractPortal();
+      if (e.code === 'KeyF') this.tryInteract();
     });
 
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
@@ -213,6 +213,26 @@ export class Player {
     this.syncWeaponVisual();
     this.onToast(`⇄ スイッチ: ${state.weapon.name}`);
     saveGame();
+  }
+  tryInteract() {
+    // 1. 近くに宝箱や回復の泉があれば優先して開ける・飲む
+    const nearby = this.world.getNearbyInteractable(this.root.position);
+    if (nearby) {
+      this.world.triggerInteractable(nearby, this, maxHp());
+      return;
+    }
+
+    // 2. 階段ポータルのチェック
+    const dist = Math.hypot(
+      this.root.position.x - this.world.portalPos.x,
+      this.root.position.z - this.world.portalPos.z
+    );
+    if (dist > 2.8) return;
+    if (this.world.portalLocked) {
+      this.onToast('🔒 ボスを倒すまで封印されている！');
+      return;
+    }
+    this.onNextFloor();
   }
 
   triggerAttack() {
