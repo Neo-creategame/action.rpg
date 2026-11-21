@@ -345,6 +345,9 @@ body {
   justify-content: center;
   z-index: 120;
 }
+#modal-overlay.hidden {
+  display: none !important;
+}
 .modal-window {
   width: 860px;
   max-width: 95vw;
