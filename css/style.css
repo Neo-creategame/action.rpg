@@ -32,6 +32,32 @@ body {
 #crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
 #crosshair::after  { left: 0; top: 6px; width: 14px; height: 2px; }
 
+#damage-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 55;
+  overflow: hidden;
+}
+
+.dmg-popup {
+  position: absolute;
+  font-weight: bold;
+  font-size: 16px;
+  color: #fff;
+  text-shadow: 0 2px 4px #000;
+  transform: translate(-50%, -50%);
+  animation: dmgFloat 0.75s ease-out forwards;
+}
+.dmg-popup.crit {
+  font-size: 21px;
+  color: #00ffff;
+}
+@keyframes dmgFloat {
+  0%   { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -130%) scale(0.95); }
+}
+
 .hud-panel {
   position: fixed;
   background: rgba(14, 16, 21, 0.85);
@@ -41,6 +67,76 @@ body {
   pointer-events: none;
   z-index: 60;
   backdrop-filter: blur(4px);
+}
+
+/* 中央上：階層＆ボスHPバー */
+#hud-top-center {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 60;
+}
+
+.floor-badge {
+  background: rgba(14, 16, 21, 0.88);
+  border: 1px solid #6fb6ff;
+  border-radius: 20px;
+  padding: 4px 18px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #6fb6ff;
+}
+
+#boss-hud {
+  width: 420px;
+  max-width: 85vw;
+  background: rgba(14, 16, 21, 0.9);
+  border: 1px solid #ff1144;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.boss-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #ff6b8b;
+  margin-bottom: 4px;
+  text-align: center;
+}
+.boss-bar-wrap {
+  position: relative;
+  height: 14px;
+  background: #1a202c;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.boss-hp-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #9b2c2c, #ff1144);
+  transition: width 0.1s ease-out;
+}
+
+/* 階段インタラクト表示 */
+#interact-prompt {
+  position: fixed;
+  bottom: 130px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 255, 255, 0.18);
+  border: 1px solid #00ffff;
+  color: #00ffff;
+  padding: 6px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 70;
 }
 
 /* 左上ステータス */
@@ -207,7 +303,7 @@ body {
 /* 通知トースト */
 #toast-container {
   position: fixed;
-  top: 90px;
+  top: 105px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
