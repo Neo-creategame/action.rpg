@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { World } from './world.js';
 import { EnemyManager } from './enemy.js';
 import { Player } from './player.js';
+import { UIManager } from './ui.js';
 import { expNeed, EXS_GAUGE_MAX } from './data.js';
 import { state, SAVE, PLAYER, EQUIPPED, maxHp, atkTotal, plus, saveGame } from './save.js';
 
@@ -31,11 +32,10 @@ function showToast(msg) {
   setTimeout(() => el.remove(), 1400);
 }
 
-// 3Dワールド座標 → 2D画面座標へ変換してダメージ数値を表示
 const damageLayer = document.getElementById('damage-layer');
 function spawnDamagePopup(worldPos, dmg, isCrit = false) {
   const projected = worldPos.clone().project(camera);
-  if (projected.z > 1) return; // カメラの背後なら表示しない
+  if (projected.z > 1) return;
 
   const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
   const y = (-projected.y * 0.5 + 0.5) * window.innerHeight;
@@ -54,6 +54,8 @@ let slowMoUntil = 0;
 
 const world = new World(scene);
 const enemyManager = new EnemyManager(scene, camera, world, showToast, spawnDamagePopup);
+let uiManager = null;
+
 const player = new Player(scene, camera, world, enemyManager, {
   onToast: showToast,
   onNextFloor: () => enterFloor(currentFloor + 1),
@@ -61,8 +63,11 @@ const player = new Player(scene, camera, world, enemyManager, {
     showToast('💀 力尽きた… 1Fへ帰還');
     enterFloor(1);
   },
-  onSlowMo: (sec) => { slowMoUntil = performance.now() + sec * 1000; }
+  onSlowMo: (sec) => { slowMoUntil = performance.now() + sec * 1000; },
+  isUiOpen: () => uiManager ? uiManager.isOpen() : false
 });
+
+uiManager = new UIManager(player, world, enemyManager, showToast);
 
 function enterFloor(floor) {
   currentFloor = floor;
@@ -74,19 +79,16 @@ function enterFloor(floor) {
   saveGame();
 }
 
-// 初期階層を開始
 enterFloor(currentFloor);
-
-// デバッグ用：Nキーで即座に次の階層（5Fボス戦などの確認用）へスキップ
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyN') enterFloor(currentFloor + 1);
-});
 
 // PointerLock
 const overlay = document.getElementById('lock-overlay');
-overlay.addEventListener('click', () => document.body.requestPointerLock());
+overlay.addEventListener('click', () => {
+  if (!uiManager.isOpen()) document.body.requestPointerLock();
+});
 document.addEventListener('pointerlockchange', () => {
-  overlay.classList.toggle('hidden', document.pointerLockElement === document.body);
+  const locked = document.pointerLockElement === document.body;
+  overlay.classList.toggle('hidden', locked || uiManager.isOpen());
 });
 
 // HUD要素
@@ -127,7 +129,6 @@ function updateHud(now) {
   floorSpan.textContent = currentFloor;
   enemyCountSpan.textContent = enemyManager.enemies.length;
 
-  // ボスHPバー
   const boss = enemyManager.activeBoss;
   if (boss && boss.hp > 0) {
     bossHud.classList.remove('hidden');
@@ -138,7 +139,6 @@ function updateHud(now) {
     bossHud.classList.add('hidden');
   }
 
-  // 階段ポータル接近チェック
   const distPortal = Math.hypot(
     player.root.position.x - world.portalPos.x,
     player.root.position.z - world.portalPos.z
@@ -158,7 +158,6 @@ function updateHud(now) {
   atkSpan.textContent = atkTotal(player.hp).toLocaleString();
   goldSpan.textContent = PLAYER.gold.toLocaleString();
 
-  // 固有ゲージ
   if (w.type === 'mubi') {
     specialWrap.classList.remove('hidden');
     specialBar.style.width = `${(player.souenGauge / 120) * 100}%`;
@@ -203,6 +202,8 @@ function updateHud(now) {
   else if (now < player.dodgeUntil) statusSpan.textContent = '回避ダッシュ中';
   else if (player.comboStep > 0) statusSpan.textContent = `コンボ ${player.comboStep}段目`;
   else statusSpan.textContent = '戦闘待機';
+
+  uiManager.updateMinimap(currentFloor);
 }
 
 let lastFpsTime = performance.now();
@@ -216,9 +217,6 @@ function animate() {
   let dt = Math.min((now - prevFrameTime) / 1000, 0.05);
   prevFrameTime = now;
 
-  // 極限回避成立時は敵と世界の時間がスローになる（プレイヤーは通常速度で反撃可能！）
-  const worldDt = now < slowMoUntil ? dt * 0.25 : dt;
-
   frames++;
   if (now >= lastFpsTime + 1000) {
     fpsSpan.textContent = frames;
@@ -226,11 +224,15 @@ function animate() {
     lastFpsTime = now;
   }
 
-  world.update(worldDt);
-  enemyManager.update(worldDt, player);
-  player.update(dt);
-  updateHud(now);
+  // メニュー（バッグ・町）を開いている間は戦闘を一時停止
+  if (!uiManager.isOpen()) {
+    const worldDt = now < slowMoUntil ? dt * 0.25 : dt;
+    world.update(worldDt);
+    enemyManager.update(worldDt, player);
+    player.update(dt);
+  }
 
+  updateHud(now);
   renderer.render(scene, camera);
 }
 
