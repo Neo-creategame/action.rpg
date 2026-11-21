@@ -23,10 +23,10 @@ export class Player {
     this.onNextFloor = callbacks.onNextFloor || (() => {});
     this.onDeath = callbacks.onDeath || (() => {});
     this.onSlowMo = callbacks.onSlowMo || (() => {});
+    this.isUiOpen = callbacks.isUiOpen || (() => false);
 
     this.hp = maxHp();
 
-    // Legend武器固有ゲージ
     this.souenGauge = 0;
     this.apoGauge = 0;
     this.starGauge = 0;
@@ -52,7 +52,6 @@ export class Player {
     this.nextQTime = 0;
     this.nextDodgeTime = 0;
     this.dodgeUntil = 0;
-    this.dodgeStartTime = 0;
     this.invulnUntil = 0;
     this.regenAcc = 0;
     this.dodgeDir = new THREE.Vector3();
@@ -122,6 +121,7 @@ export class Player {
 
   bindInputs() {
     window.addEventListener('keydown', (e) => {
+      if (this.isUiOpen()) return;
       this.keys[e.code] = true;
 
       if (e.code === 'Space' && this.onGround) {
@@ -134,22 +134,12 @@ export class Player {
       if (e.code === 'KeyZ') this.triggerExS();
       if (e.code === 'KeyX') this.swapWeapon();
       if (e.code === 'KeyF') this.tryInteractPortal();
-
-      const debugMap = {
-        Digit1: 'sword', Digit2: 'bow', Digit3: 'mubi',
-        Digit4: 'apocalypse', Digit5: 'astral_orb', Digit6: 'chronos_bow'
-      };
-      if (debugMap[e.code]) {
-        state.weapon = rollWeapon(debugMap[e.code], 10);
-        this.syncWeaponVisual();
-        this.onToast(`武器変更: ${state.weapon.name} (ATK ${state.weapon.atk})`);
-      }
     });
 
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
 
     window.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement === document.body) {
+      if (!this.isUiOpen() && document.pointerLockElement === document.body) {
         this.yaw -= e.movementX * 0.0025;
         this.pitch += e.movementY * 0.0022;
         this.pitch = Math.max(-0.35, Math.min(1.15, this.pitch));
@@ -157,7 +147,7 @@ export class Player {
     });
 
     window.addEventListener('mousedown', (e) => {
-      if (document.pointerLockElement !== document.body) return;
+      if (this.isUiOpen() || document.pointerLockElement !== document.body) return;
       if (e.button === 0) this.triggerAttack();
       if (e.button === 2) this.triggerDodge();
     });
@@ -178,17 +168,15 @@ export class Player {
     this.onNextFloor();
   }
 
-  // ---- 被弾＆ZZZ風極限回避判定 ----
   receiveEnemyAttack(rawAtk, attackerPos) {
     const now = performance.now();
     if (now < this.invulnUntil) return;
 
-    // 回避ダッシュ中なら「極限回避（ジャスト回避）」成立！
     if (now < this.dodgeUntil) {
       this.invulnUntil = now + 900;
       state.exsGauge = Math.min(EXS_GAUGE_MAX, state.exsGauge + 20);
       this.onToast('⚡ 極限回避！ExSゲージ +20%');
-      this.onSlowMo(0.35); // 0.35秒スロー演出
+      this.onSlowMo(0.35);
       this.addCameraShake(0.15, 0.1);
       return;
     }
@@ -203,7 +191,6 @@ export class Player {
     this.addCameraShake(0.22, 0.18);
     this.onToast(`💥 被弾 -${dmg} HP`);
 
-    // 軽くノックバック
     if (attackerPos) {
       const kb = this.root.position.clone().sub(attackerPos).setY(0).normalize().multiplyScalar(0.6);
       if (!this.isCollidingHorizontal(this.root.position.x + kb.x, this.root.position.z + kb.z, this.root.position.y)) {
@@ -380,7 +367,6 @@ export class Player {
   triggerDodge() {
     const now = performance.now();
     if (now < this.nextDodgeTime || now < this.dodgeUntil) return;
-    this.dodgeStartTime = now;
     this.dodgeUntil = now + 240;
     this.nextDodgeTime = now + 850;
 
@@ -395,14 +381,11 @@ export class Player {
     for (let i = 0; i < 3; i++) setTimeout(() => this.spawnAfterimage(), i * 45);
   }
 
-  // ---- 近接ヒット判定（敵＋破壊可能ブロック両対応） ----
   performMeleeHit(reach, dmg, color, isAllAround = false, isCrit = false, stunMs = 0) {
     const forward = new THREE.Vector3(-Math.sin(this.model.rotation.y), 0, -Math.cos(this.model.rotation.y));
     const origin = this.root.position.clone().add(new THREE.Vector3(0, 1.0, 0));
 
     let hitCount = 0;
-
-    // 1. 敵へのヒット
     for (const enemy of [...this.enemyManager.enemies]) {
       const toEnemy = enemy.root.position.clone().sub(origin);
       const horizDist = Math.hypot(toEnemy.x, toEnemy.z);
@@ -415,7 +398,6 @@ export class Player {
       }
     }
 
-    // 2. 破壊可能ブロックへのヒット
     for (const box of [...this.world.destructibles]) {
       const toBox = box.position.clone().sub(origin);
       const horizDist = Math.hypot(toBox.x, toBox.z);
@@ -435,7 +417,6 @@ export class Player {
     return hitCount;
   }
 
-  // ---- 3D遠距離弾（敵＋壁＋ブロック対応） ----
   fireProjectile(angleOffset, dmg, color = 0xffd36a, opts = {}) {
     const w = state.weapon;
     const ang = this.yaw + angleOffset;
@@ -468,7 +449,6 @@ export class Player {
 
   updateProjectiles() {
     this.projectiles = this.projectiles.filter((p) => {
-      // 最寄りの敵へホーミング誘導
       if (p.homing && this.enemyManager.enemies.length > 0) {
         let nearest = null;
         let minD = 999;
@@ -488,8 +468,6 @@ export class Player {
       const traveled = p.mesh.position.distanceTo(p.startPos);
 
       let hitTarget = false;
-
-      // 敵へのヒット
       for (const enemy of [...this.enemyManager.enemies]) {
         if (p.hitSet.has(enemy)) continue;
         const hitR = 0.85 * enemy.scale;
@@ -510,7 +488,6 @@ export class Player {
         }
       }
 
-      // 壁・破壊可能ブロックへのヒット
       if (!hitTarget) {
         for (const wall of this.world.walls) {
           if (p.hitSet.has(wall)) continue;
@@ -586,6 +563,7 @@ export class Player {
   }
 
   getInputMoveDirection() {
+    if (this.isUiOpen()) return new THREE.Vector3();
     let f = 0, r = 0;
     if (this.keys['KeyW']) f += 1;
     if (this.keys['KeyS']) f -= 1;
@@ -620,7 +598,6 @@ export class Player {
     const mHp = maxHp();
     if (this.hp > mHp) this.hp = mHp;
 
-    // 遺物リジェネ回復
     const regen = artifactStat('regen') + (hasSynergy('immortal_king') ? Math.ceil(mHp * 0.01) : 0);
     if (regen > 0 && this.hp < mHp) {
       this.regenAcc += dt;
