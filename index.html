@@ -3,16 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3D Action RPG - Phase 2</title>
+<title>3D Action RPG - Phase 3</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
 
 <div id="crosshair"></div>
+<div id="damage-layer"></div>
 <div id="toast-container"></div>
 
-<!-- 左上：ステータスHUD（ZZZ風ベース） -->
+<!-- 中央上：階層表示＆ボス巨大HPバー -->
+<div id="hud-top-center">
+  <div class="floor-badge">ダンジョン <span id="hud-floor">1</span>F</div>
+  <div id="boss-hud" class="hidden">
+    <div id="boss-name" class="boss-title">BOSS</div>
+    <div class="boss-bar-wrap">
+      <div id="boss-hp-bar" class="boss-hp-fill"></div>
+      <span id="boss-hp-text" class="bar-label">1000 / 1000</span>
+    </div>
+  </div>
+</div>
+
+<!-- 階段ポータル接近時のインタラクト表示 -->
+<div id="interact-prompt" class="hidden">[F] 次の階層へ進む</div>
+
+<!-- 左上：ステータスHUD -->
 <div id="hud-top-left" class="hud-panel">
   <div class="lv-badge">Lv.<span id="hud-lv">1</span></div>
   <div class="bars">
@@ -47,13 +63,14 @@
   </div>
 </div>
 
-<!-- 右上：FPS・アクション状態 -->
+<!-- 右上：FPS・残敵数 -->
 <div id="hud-top-right" class="hud-panel">
   <div>FPS: <span id="fps-value">0</span></div>
+  <div>残敵: <span id="enemy-count">0</span>体</div>
   <div id="action-status" class="status-text">待機中</div>
 </div>
 
-<!-- 右下：アクションアイコン（ZZZ風丸型スロット） -->
+<!-- 右下：アクションアイコン -->
 <div id="hud-bottom-right">
   <div class="skill-slot" id="slot-dodge">
     <span class="key-hint">Shift / 右ｸﾘｯｸ</span>
@@ -81,9 +98,9 @@
 <div id="lock-overlay">
   <div class="overlay-box">
     <h2>画面をクリックして操作開始</h2>
-    <p>WASD: 移動 / マウス: 視点回転 / Space: ジャンプ</p>
-    <p>左クリック: 通常攻撃 / Shift・右クリック: 回避 / E: 武器スキル / Q: サブ・固有技 / Z: ExS大技</p>
-    <p class="sub-note">デバッグ切替: [1]片手剣 [2]弓 [3]無尾 [4]アポカリプス [5]アストラル [6]クロノス / [X] 武器交代</p>
+    <p>WASD: 移動 / マウス: 視点回転 / Space: ジャンプ / F: 階段移動</p>
+    <p>左クリック: 通常攻撃 / Shift・右クリック: 極限回避 / E: 武器スキル / Q: 固有技 / Z: ExS大技</p>
+    <p class="sub-note">デバッグ切替: [1]片手剣 [2]弓 [3]無尾 [4]アポカリプス [5]アストラル [6]クロノス / [N] 強制次階層</p>
   </div>
 </div>
 
