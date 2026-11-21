@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { World } from './world.js';
+import { EnemyManager } from './enemy.js';
 import { Player } from './player.js';
 import { expNeed, EXS_GAUGE_MAX } from './data.js';
-import { state, PLAYER, EQUIPPED, maxHp, atkTotal, plus } from './save.js';
+import { state, SAVE, PLAYER, EQUIPPED, maxHp, atkTotal, plus, saveGame } from './save.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b0d12);
-scene.fog = new THREE.FogExp2(0x0b0d12, 0.015);
+scene.fog = new THREE.FogExp2(0x0b0d12, 0.018);
 
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 200);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -21,7 +22,6 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// トースト通知表示
 const toastContainer = document.getElementById('toast-container');
 function showToast(msg) {
   const el = document.createElement('div');
@@ -31,8 +31,56 @@ function showToast(msg) {
   setTimeout(() => el.remove(), 1400);
 }
 
+// 3Dワールド座標 → 2D画面座標へ変換してダメージ数値を表示
+const damageLayer = document.getElementById('damage-layer');
+function spawnDamagePopup(worldPos, dmg, isCrit = false) {
+  const projected = worldPos.clone().project(camera);
+  if (projected.z > 1) return; // カメラの背後なら表示しない
+
+  const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
+  const y = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+
+  const el = document.createElement('div');
+  el.className = isCrit ? 'dmg-popup crit' : 'dmg-popup';
+  el.textContent = isCrit ? `${dmg}!` : dmg;
+  el.style.left = `${x + (Math.random() - 0.5) * 24}px`;
+  el.style.top = `${y}px`;
+  damageLayer.appendChild(el);
+  setTimeout(() => el.remove(), 750);
+}
+
+let currentFloor = Math.max(1, (SAVE.cleared || 0) + 1);
+let slowMoUntil = 0;
+
 const world = new World(scene);
-const player = new Player(scene, camera, world, showToast);
+const enemyManager = new EnemyManager(scene, camera, world, showToast, spawnDamagePopup);
+const player = new Player(scene, camera, world, enemyManager, {
+  onToast: showToast,
+  onNextFloor: () => enterFloor(currentFloor + 1),
+  onDeath: () => {
+    showToast('💀 力尽きた… 1Fへ帰還');
+    enterFloor(1);
+  },
+  onSlowMo: (sec) => { slowMoUntil = performance.now() + sec * 1000; }
+});
+
+function enterFloor(floor) {
+  currentFloor = floor;
+  const layout = world.buildFloor(floor);
+  player.root.position.copy(layout.playerStart);
+  player.velocityY = 0;
+  enemyManager.spawnForFloor(floor, layout.spawnPoints, layout.bossPoint);
+  showToast(floor % 5 === 0 ? `⚠️ 第${floor}層 ボスフロア突入！` : `⚔️ 第${floor}層 到着`);
+  saveGame();
+}
+
+// 初期階層を開始
+enterFloor(currentFloor);
+
+// デバッグ用：Nキーで即座に次の階層（5Fボス戦などの確認用）へスキップ
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyN') enterFloor(currentFloor + 1);
+});
 
 // PointerLock
 const overlay = document.getElementById('lock-overlay');
@@ -43,7 +91,15 @@ document.addEventListener('pointerlockchange', () => {
 
 // HUD要素
 const fpsSpan = document.getElementById('fps-value');
+const enemyCountSpan = document.getElementById('enemy-count');
 const statusSpan = document.getElementById('action-status');
+const floorSpan = document.getElementById('hud-floor');
+const bossHud = document.getElementById('boss-hud');
+const bossNameSpan = document.getElementById('boss-name');
+const bossHpBar = document.getElementById('boss-hp-bar');
+const bossHpText = document.getElementById('boss-hp-text');
+const interactPrompt = document.getElementById('interact-prompt');
+
 const lvSpan = document.getElementById('hud-lv');
 const hpBar = document.getElementById('hud-hp-bar');
 const hpText = document.getElementById('hud-hp-text');
@@ -68,6 +124,32 @@ function updateHud(now) {
   const mHp = maxHp();
   if (player.hp > mHp) player.hp = mHp;
 
+  floorSpan.textContent = currentFloor;
+  enemyCountSpan.textContent = enemyManager.enemies.length;
+
+  // ボスHPバー
+  const boss = enemyManager.activeBoss;
+  if (boss && boss.hp > 0) {
+    bossHud.classList.remove('hidden');
+    bossNameSpan.textContent = boss.name;
+    bossHpBar.style.width = `${(boss.hp / boss.maxHp) * 100}%`;
+    bossHpText.textContent = `${boss.hp.toLocaleString()} / ${boss.maxHp.toLocaleString()}`;
+  } else {
+    bossHud.classList.add('hidden');
+  }
+
+  // 階段ポータル接近チェック
+  const distPortal = Math.hypot(
+    player.root.position.x - world.portalPos.x,
+    player.root.position.z - world.portalPos.z
+  );
+  if (distPortal <= 2.6) {
+    interactPrompt.classList.remove('hidden');
+    interactPrompt.textContent = world.portalLocked ? '🔒 ボス討伐で解放' : '[F] 次の階層へ進む';
+  } else {
+    interactPrompt.classList.add('hidden');
+  }
+
   lvSpan.textContent = PLAYER.lv;
   hpBar.style.width = `${(player.hp / mHp) * 100}%`;
   hpText.textContent = `HP ${Math.ceil(player.hp)} / ${mHp}`;
@@ -76,7 +158,7 @@ function updateHud(now) {
   atkSpan.textContent = atkTotal(player.hp).toLocaleString();
   goldSpan.textContent = PLAYER.gold.toLocaleString();
 
-  // Legend武器の固有ゲージ切替
+  // 固有ゲージ
   if (w.type === 'mubi') {
     specialWrap.classList.remove('hidden');
     specialBar.style.width = `${(player.souenGauge / 120) * 100}%`;
@@ -101,12 +183,10 @@ function updateHud(now) {
     specialWrap.classList.add('hidden');
   }
 
-  // 左下武器スロット
   mainWepSpan.textContent = `${w.name}${plus(w)}`;
   mainDurSpan.textContent = w.isLegend ? '∞' : `${w.dur}/${w.durMax}`;
   subWepSpan.textContent = EQUIPPED.sub_weapon ? `${EQUIPPED.sub_weapon.name}${plus(EQUIPPED.sub_weapon)}` : 'なし';
 
-  // 右下クールダウン
   const dodgeLeft = Math.max(0, player.nextDodgeTime - now);
   cdDodge.textContent = dodgeLeft > 0 ? `${(dodgeLeft / 1000).toFixed(1)}s` : 'READY';
   cdDodge.style.color = dodgeLeft > 0 ? '#ffd36a' : '#48bb78';
@@ -119,13 +199,10 @@ function updateHud(now) {
   cdExs.textContent = state.exsGauge >= EXS_GAUGE_MAX ? 'READY!!' : `${Math.floor(state.exsGauge)}%`;
   cdExs.style.color = state.exsGauge >= EXS_GAUGE_MAX ? '#00ffff' : '#a0aec0';
 
-  if (now < player.dodgeUntil) {
-    statusSpan.textContent = '極限回避ダッシュ中';
-  } else if (player.comboStep > 0) {
-    statusSpan.textContent = `コンボ ${player.comboStep}段目`;
-  } else {
-    statusSpan.textContent = '戦闘待機';
-  }
+  if (now < slowMoUntil) statusSpan.textContent = '⚡ 極限回避スロー';
+  else if (now < player.dodgeUntil) statusSpan.textContent = '回避ダッシュ中';
+  else if (player.comboStep > 0) statusSpan.textContent = `コンボ ${player.comboStep}段目`;
+  else statusSpan.textContent = '戦闘待機';
 }
 
 let lastFpsTime = performance.now();
@@ -136,8 +213,11 @@ function animate() {
   requestAnimationFrame(animate);
 
   const now = performance.now();
-  const dt = Math.min((now - prevFrameTime) / 1000, 0.05);
+  let dt = Math.min((now - prevFrameTime) / 1000, 0.05);
   prevFrameTime = now;
+
+  // 極限回避成立時は敵と世界の時間がスローになる（プレイヤーは通常速度で反撃可能！）
+  const worldDt = now < slowMoUntil ? dt * 0.25 : dt;
 
   frames++;
   if (now >= lastFpsTime + 1000) {
@@ -146,7 +226,8 @@ function animate() {
     lastFpsTime = now;
   }
 
-  world.update(dt);
+  world.update(worldDt);
+  enemyManager.update(worldDt, player);
   player.update(dt);
   updateHud(now);
 
