@@ -86,6 +86,14 @@ const overlay = document.getElementById('lock-overlay');
 overlay.addEventListener('click', () => {
   if (!uiManager.isOpen()) document.body.requestPointerLock();
 });
+
+// オーバーレイが消えている状態でも、画面クリック時にロックが外れていれば再ロックする
+renderer.domElement.addEventListener('mousedown', () => {
+  if (!uiManager.isOpen() && document.pointerLockElement !== document.body) {
+    document.body.requestPointerLock();
+  }
+});
+
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === document.body;
   overlay.classList.toggle('hidden', locked || uiManager.isOpen());
