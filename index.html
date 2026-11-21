@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3D Action RPG - Phase 3</title>
+<title>3D Action RPG - Phase 4</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="./css/style.css">
 </head>
@@ -50,7 +50,7 @@
   </div>
 </div>
 
-<!-- 左下：装備武器・サブ武器表示 -->
+<!-- 左下：装備武器・サブ武器・ポーション -->
 <div id="hud-bottom-left" class="hud-panel">
   <div class="weapon-row main-wep">
     <span class="tag">MAIN</span>
@@ -61,13 +61,25 @@
     <span class="tag">SUB [X]</span>
     <span id="hud-sub-wep">なし</span>
   </div>
+  <div class="weapon-row potion-row">
+    <span class="tag">回復</span>
+    <span>[R]小回復 / [V]全回復</span>
+  </div>
 </div>
 
-<!-- 右上：FPS・残敵数 -->
-<div id="hud-top-right" class="hud-panel">
-  <div>FPS: <span id="fps-value">0</span></div>
-  <div>残敵: <span id="enemy-count">0</span>体</div>
-  <div id="action-status" class="status-text">待機中</div>
+<!-- 右上：ミニマップ・メニューボタン・FPS -->
+<div id="hud-top-right-wrap">
+  <div id="minimap-box">
+    <canvas id="minimap-canvas" width="136" height="136"></canvas>
+  </div>
+  <div class="hud-panel mini-info">
+    <div>FPS: <span id="fps-value">0</span> | 残敵: <span id="enemy-count">0</span></div>
+    <div id="action-status" class="status-text">待機中</div>
+    <div class="menu-shortcuts">
+      <button id="btn-open-bag" class="hud-btn">[I] バッグ・装備</button>
+      <button id="btn-open-town" class="hud-btn">[T] 町メニュー</button>
+    </div>
+  </div>
 </div>
 
 <!-- 右下：アクションアイコン -->
@@ -94,13 +106,24 @@
   </div>
 </div>
 
+<!-- バッグ＆町メニュー用モーダルウィンドウ -->
+<div id="modal-overlay" class="hidden">
+  <div class="modal-window">
+    <div class="modal-header">
+      <h2 id="modal-title">メニュー</h2>
+      <button id="modal-close" class="close-btn">✕ 閉じる</button>
+    </div>
+    <div id="modal-body" class="modal-body"></div>
+  </div>
+</div>
+
 <!-- 操作ガイド -->
 <div id="lock-overlay">
   <div class="overlay-box">
     <h2>画面をクリックして操作開始</h2>
     <p>WASD: 移動 / マウス: 視点回転 / Space: ジャンプ / F: 階段移動</p>
-    <p>左クリック: 通常攻撃 / Shift・右クリック: 極限回避 / E: 武器スキル / Q: 固有技 / Z: ExS大技</p>
-    <p class="sub-note">デバッグ切替: [1]片手剣 [2]弓 [3]無尾 [4]アポカリプス [5]アストラル [6]クロノス / [N] 強制次階層</p>
+    <p>左クリック: 通常攻撃 / Shift・右クリック: 極限回避 / E: スキル / Q: 固有技 / Z: ExS</p>
+    <p class="sub-note">[I] バッグ・装備・ステ振り / [T] 町(宿屋・ショップ・鍛冶屋・ガチャ) / [R][V] ポーション</p>
   </div>
 </div>
 
