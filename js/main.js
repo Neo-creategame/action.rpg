@@ -52,7 +52,7 @@ function spawnDamagePopup(worldPos, dmg, isCrit = false) {
 let currentFloor = Math.max(1, (SAVE.cleared || 0) + 1);
 let slowMoUntil = 0;
 
-const world = new World(scene);
+const world = new World(scene, showToast);
 const enemyManager = new EnemyManager(scene, camera, world, showToast, spawnDamagePopup);
 let uiManager = null;
 
@@ -87,7 +87,6 @@ overlay.addEventListener('click', () => {
   if (!uiManager.isOpen()) document.body.requestPointerLock();
 });
 
-// オーバーレイが消えている状態でも、画面クリック時にロックが外れていれば再ロックする
 renderer.domElement.addEventListener('mousedown', () => {
   if (!uiManager.isOpen() && document.pointerLockElement !== document.body) {
     document.body.requestPointerLock();
@@ -147,11 +146,16 @@ function updateHud(now) {
     bossHud.classList.add('hidden');
   }
 
+  // 宝箱・回復の泉・階段ポータルの接近プロンプト
+  const nearbyItem = world.getNearbyInteractable(player.root.position);
   const distPortal = Math.hypot(
     player.root.position.x - world.portalPos.x,
     player.root.position.z - world.portalPos.z
   );
-  if (distPortal <= 2.6) {
+  if (nearbyItem) {
+    interactPrompt.classList.remove('hidden');
+    interactPrompt.textContent = nearbyItem.label;
+  } else if (distPortal <= 2.8) {
     interactPrompt.classList.remove('hidden');
     interactPrompt.textContent = world.portalLocked ? '🔒 ボス討伐で解放' : '[F] 次の階層へ進む';
   } else {
@@ -235,7 +239,7 @@ function animate() {
   // メニュー（バッグ・町）を開いている間は戦闘を一時停止
   if (!uiManager.isOpen()) {
     const worldDt = now < slowMoUntil ? dt * 0.25 : dt;
-    world.update(worldDt);
+    world.update(worldDt, player);
     enemyManager.update(worldDt, player);
     player.update(dt);
   }
