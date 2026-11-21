@@ -59,12 +59,10 @@ body {
 }
 
 .hud-panel {
-  position: fixed;
   background: rgba(14, 16, 21, 0.85);
   border: 1px solid rgba(111, 182, 255, 0.35);
   border-radius: 8px;
   padding: 10px 14px;
-  pointer-events: none;
   z-index: 60;
   backdrop-filter: blur(4px);
 }
@@ -122,7 +120,6 @@ body {
   transition: width 0.1s ease-out;
 }
 
-/* 階段インタラクト表示 */
 #interact-prompt {
   position: fixed;
   bottom: 130px;
@@ -141,11 +138,13 @@ body {
 
 /* 左上ステータス */
 #hud-top-left {
+  position: fixed;
   top: 16px;
   left: 16px;
   display: flex;
   align-items: center;
   gap: 12px;
+  pointer-events: none;
 }
 
 .lv-badge {
@@ -212,13 +211,15 @@ body {
 
 /* 左下装備情報 */
 #hud-bottom-left {
+  position: fixed;
   left: 16px;
   bottom: 20px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 220px;
+  min-width: 230px;
   font-size: 12px;
+  pointer-events: none;
 }
 .weapon-row {
   display: flex;
@@ -233,22 +234,56 @@ body {
   padding: 2px 6px;
   border-radius: 4px;
 }
-.sub-wep .tag { color: #a0aec0; }
+.sub-wep .tag, .potion-row .tag { color: #a0aec0; }
 .dur-text {
   margin-left: auto;
   font-size: 11px;
   color: #7cf0a0;
 }
 
-/* 右上FPS */
-#hud-top-right {
+/* 右上ミニマップ＆メニューショートカット */
+#hud-top-right-wrap {
+  position: fixed;
   top: 16px;
   right: 16px;
-  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 65;
+}
+#minimap-box {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: rgba(14, 16, 21, 0.9);
+  border: 2px solid #6fb6ff;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mini-info {
+  font-size: 11px;
   text-align: right;
   line-height: 1.5;
 }
 .status-text { color: #00ffff; font-weight: bold; }
+.menu-shortcuts {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.hud-btn {
+  background: #1e2636;
+  color: #e8eaf0;
+  border: 1px solid #6fb6ff;
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.hud-btn:hover { background: #2c3850; }
 
 /* 右下アクションスロット */
 #hud-bottom-right {
@@ -300,6 +335,167 @@ body {
   margin-top: 2px;
 }
 
+/* モーダルウィンドウ（バッグ・町メニュー） */
+#modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 10, 14, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 120;
+}
+.modal-window {
+  width: 860px;
+  max-width: 95vw;
+  max-height: 88vh;
+  background: #141822;
+  border: 2px solid #6fb6ff;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: #1b2230;
+  border-bottom: 1px solid #2d3748;
+}
+.modal-header h2 { font-size: 16px; color: #00ffff; }
+.close-btn {
+  background: #2d3748;
+  color: #fff;
+  border: 1px solid #4a5568;
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.modal-body {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.ui-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 14px;
+}
+.ui-card {
+  background: #191f2c;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  padding: 12px;
+}
+.ui-card h3 {
+  font-size: 13px;
+  color: #6fb6ff;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #2d3748;
+  padding-bottom: 4px;
+}
+.center-card { text-align: center; padding: 24px; line-height: 2; }
+.gold { color: #ffd36a; }
+.muted { color: #718096; font-size: 12px; }
+
+.stat-lines, .equip-list, .shop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.equip-row, .shop-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #131720;
+  padding: 5px 8px;
+  border-radius: 5px;
+}
+.synergy-box {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid #00ffff;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #00ffff;
+}
+
+.pack-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.pack-cell {
+  height: 54px;
+  background: #131720;
+  border: 1px solid #3a4559;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 11px;
+  padding: 2px;
+  cursor: pointer;
+}
+.pack-cell.empty { color: #4a5568; cursor: default; }
+.pack-cell.selected { border-color: #00ffff; background: #1e2d3d; }
+.pack-cell.legend { border-color: #ffd36a; color: #ffd36a; }
+.pack-cell.boss { border-color: #b15cff; color: #d6bcfa; }
+
+.detail-panel {
+  margin-top: 10px;
+  padding: 8px;
+  background: #131720;
+  border-radius: 6px;
+  min-height: 68px;
+}
+.detail-text { font-size: 12px; margin-bottom: 8px; }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.town-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tab-bar { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab-btn {
+  background: #1e2636;
+  color: #cbd5e0;
+  border: 1px solid #3a4559;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tab-btn.active {
+  background: #2b6cb0;
+  border-color: #00ffff;
+  color: #fff;
+  font-weight: bold;
+}
+
+.mini-btn, .act-btn {
+  background: #2d3748;
+  color: #fff;
+  border: 1px solid #4a5568;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.act-btn { padding: 6px 12px; font-size: 12px; }
+.mini-btn.primary, .act-btn.primary { background: #2b6cb0; border-color: #63b3ed; }
+.act-btn.danger { background: #9b2c2c; border-color: #fc8181; }
+
 /* 通知トースト */
 #toast-container {
   position: fixed;
@@ -311,10 +507,10 @@ body {
   align-items: center;
   gap: 6px;
   pointer-events: none;
-  z-index: 90;
+  z-index: 150;
 }
 .toast-msg {
-  background: rgba(14, 16, 21, 0.88);
+  background: rgba(14, 16, 21, 0.92);
   border: 1px solid #ffd36a;
   color: #ffd36a;
   padding: 5px 14px;
@@ -340,7 +536,6 @@ body {
   z-index: 100;
   cursor: pointer;
 }
-#lock-overlay.hidden { display: none; }
 
 .overlay-box {
   background: #161b26;
