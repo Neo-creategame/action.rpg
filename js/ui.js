@@ -647,8 +647,8 @@ export class UIManager {
     }
 
     const pPos = this.player.root.position;
-    const gx = Math.round(pPos.x / 3);
-    const gz = Math.round(pPos.z / 3);
+    const gx = Math.round(pPos.x / 4.5);
+    const gz = Math.round(pPos.z / 4.5);
     for (let dx = -3; dx <= 3; dx++) {
       for (let dz = -3; dz <= 3; dz++) {
         this.exploredSet.add(`${gx + dx},${gz + dz}`);
@@ -660,18 +660,18 @@ export class UIManager {
     const h = this.minimapCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    const scale = 2.4; // 1m = 2.4px
+    const scale = 1.65; // 広大ダンジョンを見渡しやすく調整
     const cx = w / 2;
     const cy = h / 2;
 
-    // 探索済み床
-    ctx.fillStyle = 'rgba(45, 55, 72, 0.7)';
+    // 探索済みエリア
+    ctx.fillStyle = 'rgba(45, 55, 72, 0.72)';
     for (const key of this.exploredSet) {
       const [ex, ez] = key.split(',').map(Number);
-      const sx = cx + (ex * 3 - pPos.x) * scale;
-      const sy = cy + (ez * 3 - pPos.z) * scale;
-      if (sx < -10 || sx > w + 10 || sy < -10 || sy > h + 10) continue;
-      ctx.fillRect(sx - 3.5, sy - 3.5, 7, 7);
+      const sx = cx + (ex * 4.5 - pPos.x) * scale;
+      const sy = cy + (ez * 4.5 - pPos.z) * scale;
+      if (sx < -12 || sx > w + 12 || sy < -12 || sy > h + 12) continue;
+      ctx.fillRect(sx - 3.8, sy - 3.8, 7.6, 7.6);
     }
 
     // 周囲の壁
@@ -680,8 +680,18 @@ export class UIManager {
       if (wall.userData.destructible) continue;
       const sx = cx + (wall.position.x - pPos.x) * scale;
       const sy = cy + (wall.position.z - pPos.z) * scale;
-      if (sx < -10 || sx > w + 10 || sy < -10 || sy > h + 10) continue;
-      ctx.fillRect(sx - 3.2, sy - 3.2, 6.4, 6.4);
+      if (sx < -12 || sx > w + 12 || sy < -12 || sy > h + 12) continue;
+      ctx.fillRect(sx - 3.6, sy - 3.6, 7.2, 7.2);
+    }
+
+    // 宝箱（金色）＆回復の泉（緑色）
+    for (const item of this.world.interactables) {
+      if ((item.type === 'chest' && item.opened) || (item.type === 'fountain' && item.used)) continue;
+      const ix = cx + (item.pos.x - pPos.x) * scale;
+      const iy = cy + (item.pos.z - pPos.z) * scale;
+      if (ix < 0 || ix > w || iy < 0 || iy > h) continue;
+      ctx.fillStyle = item.type === 'chest' ? '#ffd36a' : '#48bb78';
+      ctx.fillRect(ix - 3, iy - 3, 6, 6);
     }
 
     // 階段ポータル（シアン）
