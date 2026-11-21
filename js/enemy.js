@@ -1,15 +1,15 @@
 import * as THREE from 'three';
 import { EXP_PER_KILL, expNeed, goldFor, DROP_RATE, EXS_GAUGE_MAX } from './data.js';
 import {
-  state, SAVE, PLAYER, maxHp, takeDamage, bossDmgMult,
+  state, SAVE, PLAYER, bossDmgMult,
   rollWeapon, rollArmor, randomSlot, rollArtifact, addToPack, saveGame
 } from './save.js';
 
 const BOSS_DEFS = [
-  { floor: 5,  name: '第5層ボス【深淵の魔王】',   color: 0xb15cff, scale: 1.9, hpMult: 1.0,  atkMult: 1.0,  dropWep: 'demon_sword' },
-  { floor: 10, name: '第10層ボス【滅びの炎巨神】', color: 0xff4500, scale: 2.2, hpMult: 1.35, atkMult: 1.25, dropWep: 'eruption_wand' },
-  { floor: 15, name: '第15層ボス【天空の雷帝竜】', color: 0xffd36a, scale: 2.4, hpMult: 1.7,  atkMult: 1.45, dropWep: 'dragon_chain' },
-  { floor: 20, name: '第20層ボス【雷神・タケミカヅチ】', color: 0x00ffff, scale: 2.5, hpMult: 2.1, atkMult: 1.7, dropWep: 'lightning_staff' }
+  { floor: 5,  type: 'demon',     name: '第5層ボス【深淵の魔王】',         color: 0xb15cff, scale: 1.9, hpMult: 1.0,  atkMult: 1.0,  dropWep: 'demon_sword' },
+  { floor: 10, type: 'ifrit',     name: '第10層ボス【滅びの炎巨神】',       color: 0xff4500, scale: 2.2, hpMult: 1.35, atkMult: 1.25, dropWep: 'eruption_wand' },
+  { floor: 15, type: 'dragon',    name: '第15層ボス【天空の雷帝竜】',       color: 0xffd36a, scale: 2.4, hpMult: 1.7,  atkMult: 1.45, dropWep: 'dragon_chain' },
+  { floor: 20, type: 'takemika',  name: '第20層ボス【雷神・タケミカヅチ】', color: 0x00ffff, scale: 2.5, hpMult: 2.1,  atkMult: 1.7,  dropWep: 'lightning_staff' }
 ];
 
 export class EnemyManager {
@@ -22,33 +22,39 @@ export class EnemyManager {
 
     this.enemies = [];
     this.enemyProjectiles = [];
+    this.hazardZones = []; // ボスのマグマ噴火・落雷予兆ゾーン
     this.activeBoss = null;
+    this.initialBossPillars = 0;
   }
 
   clearAll() {
-    for (const e of this.enemies) {
-      this.scene.remove(e.root);
-    }
+    for (const e of this.enemies) this.scene.remove(e.root);
     this.enemies = [];
     this.activeBoss = null;
 
-    for (const p of this.enemyProjectiles) {
-      this.scene.remove(p.mesh);
-    }
+    for (const p of this.enemyProjectiles) this.scene.remove(p.mesh);
     this.enemyProjectiles = [];
+
+    for (const h of this.hazardZones) this.scene.remove(h.mesh);
+    this.hazardZones = [];
   }
 
-  // 階層に応じた敵・ボスのスポーン
   spawnForFloor(floor, spawnPoints, bossPoint) {
     this.clearAll();
     const isBossFloor = floor % 5 === 0;
 
-    // 雑魚敵・レア敵の配置
+    // 階層が進むと上位モンスター（ダークナイト・ワイバーン）が追加出現
     const mobTypes = [
-      { name: 'コボルト兵',   color: 0xe53e3e, scale: 1.0, hp: 140, atk: 12, speed: 0.085, range: 2.2 },
-      { name: 'シャドウウルフ', color: 0x805ad5, scale: 0.9, hp: 110, atk: 15, speed: 0.125, range: 2.0 },
-      { name: 'ゴーレム衛兵', color: 0xdd6b20, scale: 1.35, hp: 240, atk: 20, speed: 0.055, range: 2.6 }
+      { name: 'コボルト兵',     color: 0xe53e3e, scale: 1.0,  hp: 140, atk: 12, speed: 0.085, range: 2.2 },
+      { name: 'シャドウウルフ', color: 0x805ad5, scale: 0.9,  hp: 110, atk: 15, speed: 0.130, range: 2.0 },
+      { name: 'ゴーレム衛兵',   color: 0xdd6b20, scale: 1.35, hp: 250, atk: 20, speed: 0.055, range: 2.6 }
     ];
+    if (floor >= 6) {
+      mobTypes.push({ name: 'ダークナイト', color: 0x4a5568, scale: 1.15, hp: 220, atk: 24, speed: 0.095, range: 2.5 });
+    }
+    if (floor >= 11) {
+      mobTypes.push({ name: 'カオスワイバーン', color: 0xd53f8c, scale: 1.25, hp: 280, atk: 28, speed: 0.115, range: 3.0, ranged: true });
+    }
 
     const scaleMult = 1 + (floor - 1) * 0.22;
 
@@ -71,26 +77,28 @@ export class EnemyManager {
         atkRange: base.range,
         isBoss: false,
         isRare,
+        ranged: !!base.ranged,
         floor
       });
     });
 
-    // ボス階層ならボスを配置
     if (isBossFloor && bossPoint) {
       const def = BOSS_DEFS.find((b) => b.floor === floor) || {
+        type: 'overlord',
         name: `第${floor}層ボス【深淵の覇王】`,
         color: 0xff1144,
-        scale: 2.5,
-        hpMult: 1.5 + floor * 0.08,
-        atkMult: 1.2 + floor * 0.05,
+        scale: 2.6,
+        hpMult: 1.6 + floor * 0.08,
+        atkMult: 1.3 + floor * 0.05,
         dropWep: ['demon_sword', 'eruption_wand', 'dragon_chain', 'lightning_staff'][Math.floor(Math.random() * 4)]
       };
 
-      const bossHp = Math.round(1600 * scaleMult * def.hpMult);
+      const bossHp = Math.round(1700 * scaleMult * def.hpMult);
       const bossAtk = Math.round(28 * (1 + (floor - 1) * 0.16) * def.atkMult);
 
       const boss = this.createEnemy({
         name: def.name,
+        bossType: def.type,
         x: bossPoint.x,
         z: bossPoint.z,
         color: def.color,
@@ -98,14 +106,15 @@ export class EnemyManager {
         hp: bossHp,
         maxHp: bossHp,
         atk: bossAtk,
-        speed: 0.075,
-        atkRange: 3.8,
+        speed: 0.08,
+        atkRange: 4.0,
         isBoss: true,
         isRare: false,
         dropWep: def.dropWep,
         floor
       });
       this.activeBoss = boss;
+      this.initialBossPillars = this.world.destructibles.length;
     }
   }
 
@@ -122,13 +131,11 @@ export class EnemyManager {
       roughness: 0.45
     });
 
-    // 胴体
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.9 * s, 1.3 * s, 0.9 * s), mat);
     body.position.y = 0.75 * s;
     body.castShadow = true;
     root.add(body);
 
-    // 頭部・発光アイ
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.65 * s, 0.65 * s, 0.65 * s), mat);
     head.position.y = 1.65 * s;
     head.castShadow = true;
@@ -141,7 +148,18 @@ export class EnemyManager {
     eye.position.set(0, 1.68 * s, 0.34 * s);
     root.add(eye);
 
-    // 攻撃予兆リング（足元に広がる赤い警告円）
+    // ボスには角・翼パーツを追加して威圧感を出す
+    if (cfg.isBoss) {
+      const hornGeo = new THREE.ConeGeometry(0.22 * s, 0.9 * s, 6);
+      const hornL = new THREE.Mesh(hornGeo, mat);
+      hornL.position.set(-0.35 * s, 2.2 * s, 0);
+      hornL.rotation.z = 0.3;
+      const hornR = new THREE.Mesh(hornGeo, mat);
+      hornR.position.set(0.35 * s, 2.2 * s, 0);
+      hornR.rotation.z = -0.3;
+      root.add(hornL, hornR);
+    }
+
     const warnGeo = new THREE.RingGeometry(0.2, cfg.atkRange, 28);
     const warnMat = new THREE.MeshBasicMaterial({
       color: 0xff2244,
@@ -154,19 +172,18 @@ export class EnemyManager {
     warnRing.position.y = 0.06;
     root.add(warnRing);
 
-    // 3D頭上HPバー
     const hpBg = new THREE.Mesh(
       new THREE.PlaneGeometry(1.4 * s, 0.16),
       new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide })
     );
-    hpBg.position.y = 2.3 * s;
+    hpBg.position.y = 2.4 * s;
     root.add(hpBg);
 
     const hpFill = new THREE.Mesh(
       new THREE.PlaneGeometry(1.34 * s, 0.11),
       new THREE.MeshBasicMaterial({ color: cfg.isBoss ? 0xff1144 : cfg.isRare ? 0xffd36a : 0xe53e3e, side: THREE.DoubleSide })
     );
-    hpFill.position.set(0, 2.3 * s, 0.01);
+    hpFill.position.set(0, 2.4 * s, 0.01);
     root.add(hpFill);
 
     const enemy = {
@@ -179,10 +196,10 @@ export class EnemyManager {
       hpBg,
       hpFill,
       hpBarWidth: 1.34 * s,
-      state: 'idle',      // 'idle' | 'chase' | 'windup' | 'cooldown'
+      state: 'idle',
       stateTimer: 0,
+      specialTimer: 3.5,
       stunUntil: 0,
-      bleedStacks: 0,
       hitFlashUntil: 0
     };
 
@@ -190,14 +207,13 @@ export class EnemyManager {
     return enemy;
   }
 
-  // プレイヤーから敵へのダメージ適用
   damageEnemy(enemy, rawDmg, opts = {}) {
     if (!enemy || enemy.hp <= 0) return false;
     const now = performance.now();
 
     let dmg = Math.round(rawDmg * (enemy.isBoss ? bossDmgMult() : 1.0));
     if (enemy.stunUntil > now) {
-      dmg = Math.round(dmg * 1.3); // ブレイク/スタン中の追撃ボーナス
+      dmg = Math.round(dmg * 1.35);
     }
 
     enemy.hp = Math.max(0, enemy.hp - dmg);
@@ -209,12 +225,10 @@ export class EnemyManager {
       enemy.warnMat.opacity = 0;
     }
 
-    // 3D空間のワールド座標をスクリーン座標へ変換してダメージ数値表示
     const popupPos = enemy.root.position.clone().add(new THREE.Vector3(0, 1.8 * enemy.scale, 0));
     this.onDamagePopup(popupPos, dmg, opts.isCrit || enemy.stunUntil > now);
     this.world.spawnHitSpark(popupPos, opts.color || 0x00ffff);
 
-    // HPバー更新
     const ratio = Math.max(0, enemy.hp / enemy.maxHp);
     enemy.hpFill.scale.x = Math.max(0.001, ratio);
     enemy.hpFill.position.x = -(1 - ratio) * (enemy.hpBarWidth * 0.5);
@@ -236,10 +250,9 @@ export class EnemyManager {
     this.enemies = this.enemies.filter((e) => e !== enemy);
     if (this.activeBoss === enemy) {
       this.activeBoss = null;
-      this.world.unlockExitPortal(); // ボス撃破で階段ポータル解放
+      this.world.unlockExitPortal();
     }
 
-    // EXP・ゴールド・ドロップ報酬
     const expGain = EXP_PER_KILL * (enemy.isBoss ? 10 : enemy.isRare ? 3 : 1);
     const goldGain = goldFor(enemy.floor, enemy.isBoss) * (enemy.isRare ? 2 : 1);
     PLAYER.exp += expGain;
@@ -253,7 +266,6 @@ export class EnemyManager {
       this.onToast(`🎉 LEVEL UP! Lv.${PLAYER.lv} (ステータスPt +3)`);
     }
 
-    // ボス確定ドロップ＆通常ドロップ
     if (enemy.isBoss) {
       SAVE.cleared = Math.max(SAVE.cleared, enemy.floor);
       const bossWep = rollWeapon(enemy.dropWep || 'demon_sword', enemy.floor);
@@ -266,9 +278,14 @@ export class EnemyManager {
     } else if (Math.random() < (enemy.isRare ? 0.65 : DROP_RATE)) {
       const r = Math.random();
       let drop = null;
-      if (r < 0.45) drop = rollWeapon(['sword', 'dual', 'bow', 'greatsword', 'spear'][Math.floor(Math.random() * 5)], enemy.floor);
-      else if (r < 0.85) drop = rollArmor(randomSlot(), enemy.floor);
-      else drop = rollArtifact();
+      if (r < 0.45) {
+        const types = ['sword', 'dual', 'bow', 'greatsword', 'spear', 'spellbook'];
+        drop = rollWeapon(types[Math.floor(Math.random() * types.length)], enemy.floor);
+      } else if (r < 0.85) {
+        drop = rollArmor(randomSlot(), enemy.floor);
+      } else {
+        drop = rollArtifact();
+      }
 
       if (drop && addToPack(drop)) {
         this.onToast(`✨ ドロップ: ${drop.name || drop.label}`);
@@ -278,10 +295,9 @@ export class EnemyManager {
     saveGame();
   }
 
-  // 敵からの遠距離弾（ボスや一部雑魚用）
-  fireEnemyOrb(enemy, dir) {
+  fireEnemyOrb(enemy, dir, speed = 0.25) {
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.32, 10, 10),
+      new THREE.SphereGeometry(0.35, 10, 10),
       new THREE.MeshBasicMaterial({ color: enemy.color })
     );
     mesh.position.copy(enemy.root.position).add(new THREE.Vector3(0, 1.2 * enemy.scale, 0));
@@ -289,48 +305,136 @@ export class EnemyManager {
 
     this.enemyProjectiles.push({
       mesh,
-      vel: dir.clone().multiplyScalar(0.24),
+      vel: dir.clone().multiplyScalar(speed),
       atk: enemy.atk,
-      life: 3.0
+      life: 3.5
     });
+  }
+
+  // ボスの予兆範囲攻撃（マグマ噴火・雷帝落雷）
+  spawnHazardZone(x, z, radius, delaySec, atk, color) {
+    const ring = new THREE.Mesh(
+      new THREE.CircleGeometry(radius, 24),
+      new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.35 })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.08, z);
+    this.scene.add(ring);
+
+    this.hazardZones.push({
+      mesh: ring,
+      pos: new THREE.Vector3(x, 0, z),
+      radius,
+      timer: delaySec,
+      atk,
+      color
+    });
+  }
+
+  // ボスごとの固有大技実行
+  triggerBossSpecial(boss, playerPos) {
+    const type = boss.bossType;
+    if (type === 'ifrit') {
+      // 10F 炎巨神：マグマ噴火ゾーンを3箇所発生
+      this.onToast('🔥 炎巨神のマグマ噴火！赤い円から離れろ！');
+      for (let i = 0; i < 3; i++) {
+        const ox = playerPos.x + (Math.random() - 0.5) * 9;
+        const oz = playerPos.z + (Math.random() - 0.5) * 9;
+        this.spawnHazardZone(ox, oz, 3.2, 1.35, Math.round(boss.atk * 1.4), 0xff4500);
+      }
+    } else if (type === 'dragon') {
+      // 15F 雷帝竜：5連雷帝落雷陣
+      this.onToast('⚡ 雷帝竜の雷嵐ブレス！');
+      for (let i = 0; i < 5; i++) {
+        const ox = playerPos.x + (Math.random() - 0.5) * 11;
+        const oz = playerPos.z + (Math.random() - 0.5) * 11;
+        this.spawnHazardZone(ox, oz, 2.8, 1.2 + i * 0.15, Math.round(boss.atk * 1.3), 0xffd36a);
+      }
+    } else if (type === 'takemika' || type === 'overlord') {
+      // 20F+ 雷神・覇王：全方位8方向魔力弾＋落雷
+      this.onToast('💥 ボスの全周囲サンダーストーム！');
+      for (let i = 0; i < 8; i++) {
+        const ang = (Math.PI * 2 * i) / 8;
+        this.fireEnemyOrb(boss, new THREE.Vector3(Math.cos(ang), 0, Math.sin(ang)), 0.28);
+      }
+      this.spawnHazardZone(playerPos.x, playerPos.z, 3.4, 1.25, Math.round(boss.atk * 1.5), 0x00ffff);
+    } else {
+      // 5F 深淵の魔王：3WAY追尾闇弾
+      const baseDir = playerPos.clone().sub(boss.root.position).setY(0).normalize();
+      [-0.3, 0, 0.3].forEach((off) => {
+        const d = baseDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), off);
+        this.fireEnemyOrb(boss, d, 0.26);
+      });
+    }
   }
 
   update(dt, player) {
     const now = performance.now();
     const pPos = player.root.position;
 
+    // ボス部屋の魔力結晶柱がすべて破壊されたらボスをブレイクスタンさせるギミック
+    if (this.activeBoss && this.initialBossPillars > 0 && this.world.destructibles.length === 0) {
+      this.initialBossPillars = 0;
+      this.activeBoss.stunUntil = now + 4500;
+      this.onToast('💥 魔力結晶全破壊！ボスが4.5秒間ブレイクスタン！');
+    }
+
+    // 予兆ゾーン（マグマ噴火・落雷）の更新
+    this.hazardZones = this.hazardZones.filter((h) => {
+      h.timer -= dt;
+      h.mesh.material.opacity = 0.25 + (1 - Math.max(0, h.timer / 1.4)) * 0.55;
+      if (h.timer <= 0) {
+        // 爆発柱エフェクト＆プレイヤー被弾判定
+        for (let i = 0; i < 8; i++) {
+          this.world.spawnHitSpark(h.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), h.color);
+        }
+        if (Math.hypot(pPos.x - h.pos.x, pPos.z - h.pos.z) <= h.radius && pPos.y < 1.5) {
+          player.receiveEnemyAttack(h.atk, h.pos);
+        }
+        this.scene.remove(h.mesh);
+        return false;
+      }
+      return true;
+    });
+
     for (const enemy of [...this.enemies]) {
-      // 頭上HPバーをカメラの向きに合わせる（ビルボード）
       enemy.hpBg.lookAt(this.camera.position);
       enemy.hpFill.lookAt(this.camera.position);
 
-      // ヒットフラッシュ復元
       if (now < enemy.hitFlashUntil) {
         enemy.mat.emissive.setHex(0xffffff);
-        enemy.mat.emissiveIntensity = 0.8;
+        enemy.mat.emissiveIntensity = 0.85;
       } else {
         enemy.mat.emissive.setHex(enemy.color);
         enemy.mat.emissiveIntensity = enemy.isBoss ? 0.25 : 0.1;
       }
 
-      // スタン中は行動停止
       if (now < enemy.stunUntil) {
         enemy.warnMat.opacity = 0;
         continue;
+      }
+
+      // ボスの固有大技タイマー
+      if (enemy.isBoss) {
+        enemy.specialTimer -= dt;
+        if (enemy.specialTimer <= 0) {
+          enemy.specialTimer = 5.5;
+          this.triggerBossSpecial(enemy, pPos);
+        }
       }
 
       const toPlayer = new THREE.Vector3(pPos.x - enemy.root.position.x, 0, pPos.z - enemy.root.position.z);
       const dist = toPlayer.length();
       const dir = dist > 0.01 ? toPlayer.clone().normalize() : new THREE.Vector3(0, 0, 1);
 
-      // 索敵範囲外なら待機
-      if (!enemy.isBoss && dist > 18 && enemy.state === 'idle') continue;
+      if (!enemy.isBoss && dist > 22 && enemy.state === 'idle') continue;
 
       if (enemy.state === 'idle' || enemy.state === 'chase') {
         enemy.state = 'chase';
         enemy.root.rotation.y = Math.atan2(dir.x, dir.z);
 
-        if (dist > enemy.atkRange * 0.85) {
+        const stopDist = enemy.ranged ? 9.0 : enemy.atkRange * 0.85;
+        if (dist > stopDist) {
           const nextX = enemy.root.position.x + dir.x * enemy.speed;
           const nextZ = enemy.root.position.z + dir.z * enemy.speed;
           if (!this.world.isBlockedForEntity(nextX, enemy.root.position.z, 0.5 * enemy.scale)) {
@@ -340,12 +444,10 @@ export class EnemyManager {
             enemy.root.position.z = nextZ;
           }
         } else {
-          // 攻撃予兆（テレグラフ）開始！
           enemy.state = 'windup';
           enemy.stateTimer = enemy.isBoss ? 0.65 : 0.55;
         }
       } else if (enemy.state === 'windup') {
-        // 赤い警告円を徐々に濃くして「今が極限回避のタイミング！」と知らせる
         enemy.stateTimer -= dt;
         const progress = 1 - Math.max(0, enemy.stateTimer / 0.65);
         enemy.warnMat.opacity = 0.2 + progress * 0.65;
@@ -356,24 +458,18 @@ export class EnemyManager {
           enemy.state = 'cooldown';
           enemy.stateTimer = enemy.isBoss ? 1.1 : 1.3;
 
-          // 攻撃判定実行
-          if (dist <= enemy.atkRange + 0.6) {
+          if (enemy.ranged) {
+            this.fireEnemyOrb(enemy, dir, 0.22);
+          } else if (dist <= enemy.atkRange + 0.6) {
             player.receiveEnemyAttack(enemy.atk, enemy.root.position);
-          }
-          // ボスは遠距離衝撃弾も放つ
-          if (enemy.isBoss) {
-            this.fireEnemyOrb(enemy, dir);
           }
         }
       } else if (enemy.state === 'cooldown') {
         enemy.stateTimer -= dt;
-        if (enemy.stateTimer <= 0) {
-          enemy.state = 'chase';
-        }
+        if (enemy.stateTimer <= 0) enemy.state = 'chase';
       }
     }
 
-    // 敵の遠距離弾更新
     this.enemyProjectiles = this.enemyProjectiles.filter((p) => {
       p.life -= dt;
       p.mesh.position.add(p.vel);
