@@ -81,6 +81,12 @@ export class UIManager {
     this.activeModal = null;
     this.modalOverlay.classList.add('hidden');
     saveGame();
+
+    // メニューを閉じたら「クリックして操作再開」のオーバーレイを再表示する
+    const lockOverlay = document.getElementById('lock-overlay');
+    if (lockOverlay) {
+      lockOverlay.classList.remove('hidden');
+    }
   }
 
   // ---- ポーション使用 ----
