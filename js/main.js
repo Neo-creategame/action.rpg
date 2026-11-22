@@ -50,6 +50,7 @@ function spawnDamagePopup(worldPos, dmg, isCrit = false) {
 }
 
 let currentFloor = Math.max(1, (SAVE.cleared || 0) + 1);
+let isBossStage = false; // false = 通常階 (XF), true = ボス階 (X.5F)
 let slowMoUntil = 0;
 
 const world = new World(scene, showToast);
@@ -58,10 +59,18 @@ let uiManager = null;
 
 const player = new Player(scene, camera, world, enemyManager, {
   onToast: showToast,
-  onNextFloor: () => enterFloor(currentFloor + 1),
+  onNextFloor: () => {
+    if (!isBossStage) {
+      // 通常階 (XF) クリア → 毎階層必ずボス階 (X.5F) へ！
+      enterFloor(currentFloor, true);
+    } else {
+      // ボス階 (X.5F) クリア → 次の階層 (X+1F) へ！
+      enterFloor(currentFloor + 1, false);
+    }
+  },
   onDeath: () => {
     showToast('💀 力尽きた… 1Fへ帰還');
-    enterFloor(1);
+    enterFloor(1, false);
   },
   onSlowMo: (sec) => { slowMoUntil = performance.now() + sec * 1000; },
   isUiOpen: () => uiManager ? uiManager.isOpen() : false
@@ -69,17 +78,20 @@ const player = new Player(scene, camera, world, enemyManager, {
 
 uiManager = new UIManager(player, world, enemyManager, showToast);
 
-function enterFloor(floor) {
+function enterFloor(floor, bossFlag = false) {
   currentFloor = floor;
-  const layout = world.buildFloor(floor);
+  isBossStage = bossFlag;
+
+  const layout = world.buildFloor(floor, isBossStage);
   player.root.position.copy(layout.playerStart);
   player.velocityY = 0;
-  enemyManager.spawnForFloor(floor, layout.spawnPoints, layout.bossPoint);
-  showToast(floor % 5 === 0 ? `⚠️ 第${floor}層 ボスフロア突入！` : `⚔️ 第${floor}層 到着`);
+
+  enemyManager.spawnForFloor(floor, layout.spawnPoints, layout.bossPoint, isBossStage, layout.bossRoomCorners);
+  showToast(isBossStage ? `⚠️ 第${floor}.5層 ボス階突入！` : `⚔️ 第${floor}層 到着`);
   saveGame();
 }
 
-enterFloor(currentFloor);
+enterFloor(currentFloor, false);
 
 // PointerLock
 const overlay = document.getElementById('lock-overlay');
