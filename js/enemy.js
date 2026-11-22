@@ -9,70 +9,70 @@ function getBossDefinition(floor) {
   if (floor === 25) {
     return {
       type: 'golem_guard',
-      name: '第25層【射撃耐性】ゴーレム・ガーディアン',
+      name: '25.5F【射撃耐性】ゴーレム・ガーディアン',
       color: 0x718096, scale: 2.5, hpMult: 1.5, atkMult: 1.4, dropWep: 'demon_sword'
     };
   }
   if (floor === 35) {
     return {
       type: 'ninja',
-      name: '第35層【反撃の刃】影の暗殺者 ニンジャ',
+      name: '35.5F【反撃の刃】影の暗殺者 ニンジャ',
       color: 0x2d3748, scale: 2.0, hpMult: 1.4, atkMult: 1.65, dropWep: 'dragon_chain'
     };
   }
   if (floor === 45) {
     return {
       type: 'elementalist',
-      name: '第45層【魔力反応】魔導王 エレメンタリスト',
+      name: '45.5F【魔力反応】魔導王 エレメンタリスト',
       color: 0x805ad5, scale: 2.3, hpMult: 1.6, atkMult: 1.6, dropWep: 'eruption_wand'
     };
   }
   if (floor === 55) {
     return {
       type: 'anti_range',
-      name: '第55層【結界の守護者】アンチ・レンジゴーレム',
+      name: '55.5F【結界の守護者】アンチ・レンジゴーレム',
       color: 0x3182ce, scale: 2.5, hpMult: 1.75, atkMult: 1.7, dropWep: 'lightning_staff'
     };
   }
   if (floor === 60) {
     return {
       type: 'red_dragon',
-      name: '第60層【暴君】真紅の皇帝 レッドドラゴン',
+      name: '60.5F【暴君】真紅の皇帝 レッドドラゴン',
       color: 0xe53e3e, scale: 2.9, hpMult: 2.2, atkMult: 2.0, dropWep: 'dragon_chain'
     };
   }
   if (floor === 15) {
     return {
       type: 'thunder_dragon',
-      name: '第15層【雷帝】天空の雷帝竜',
-      color: 0xffd36a, scale: 2.6, hpMult: 2.2, atkMult: 1.8, dropWep: 'dragon_chain'
+      name: '15.5F【雷帝】天空の雷帝竜',
+      color: 0xffd36a, scale: 2.6, hpMult: 2.5, atkMult: 1.8, dropWep: 'dragon_chain'
     };
   }
   if (floor === 10) {
     return {
       type: 'ifrit',
-      name: '第10層【炎巨神】滅びの炎巨神',
+      name: '10.5F【炎巨神】滅びの炎巨神',
       color: 0xff4500, scale: 2.3, hpMult: 1.4, atkMult: 1.3, dropWep: 'eruption_wand'
     };
   }
   if (floor === 5) {
     return {
       type: 'demon',
-      name: '第5層【魔王】深淵の魔王',
-      color: 0xb15cff, scale: 2.0, hpMult: 1.0, atkMult: 1.0, dropWep: 'demon_sword'
+      name: '5.5F【魔王】深淵の魔王',
+      color: 0xb15cff, scale: 2.0, hpMult: 1.15, atkMult: 1.1, dropWep: 'demon_sword'
     };
   }
 
   const isMajor = (floor >= 15 && floor % 10 === 0);
-  const title = floor >= 300 ? `第${floor}層【適応の装甲】深淵神` : isMajor ? `第${floor}層【大ボス】覇王` : `第${floor}層ボス`;
+  const title = floor >= 300 ? `${floor}.5F【適応の装甲】深淵神` : isMajor ? `${floor}.5F【大ボス】覇王` : `${floor}.5F 階層守護者`;
   const drops = ['demon_sword', 'eruption_wand', 'dragon_chain', 'lightning_staff'];
   return {
     type: isMajor ? 'major_boss' : 'standard_boss',
     name: title,
     color: isMajor ? 0xff1144 : 0xd53f8c,
-    scale: isMajor ? 2.7 : 2.3,
-    hpMult: (isMajor ? 2.4 : 1.5) + floor * 0.02,
-    atkMult: (isMajor ? 1.8 : 1.3) + floor * 0.015,
+    scale: isMajor ? 2.7 : 2.1,
+    hpMult: (isMajor ? 2.5 : 1.0) + floor * 0.02,
+    atkMult: (isMajor ? 1.8 : 1.0) + floor * 0.015,
     dropWep: drops[Math.floor(Math.random() * drops.length)]
   };
 }
@@ -89,13 +89,21 @@ export class EnemyManager {
     this.enemyProjectiles = [];
     this.hazardZones = [];
     this.activeBoss = null;
+    this.bossRoomCorners = [
+      { x: -18, z: -18 }, { x: 18, z: -18 },
+      { x: -18, z: 18 },  { x: 18, z: 18 }
+    ];
   }
 
   clearAll() {
     for (const e of this.enemies) this.scene.remove(e.root);
     this.enemies = [];
     this.activeBoss = null;
+    this.clearAllProjectilesAndHazards();
+  }
 
+  // ボス撃破時に残存する弾幕・予兆ゾーンを全消去
+  clearAllProjectilesAndHazards() {
     for (const p of this.enemyProjectiles) this.scene.remove(p.mesh);
     this.enemyProjectiles = [];
 
@@ -103,9 +111,9 @@ export class EnemyManager {
     this.hazardZones = [];
   }
 
-  spawnForFloor(floor, spawnPoints, bossPoint) {
+  spawnForFloor(floor, spawnPoints, bossPoint, isBossFloor = false, bossRoomCorners = null) {
     this.clearAll();
-    const isBossFloor = floor % 5 === 0;
+    if (bossRoomCorners) this.bossRoomCorners = bossRoomCorners;
 
     const mobTypes = [
       { name: 'コボルト兵',       color: 0xe53e3e, scale: 1.0,  hp: 140, atk: 12, speed: 0.085, range: 2.2 },
@@ -117,36 +125,41 @@ export class EnemyManager {
 
     const scaleMult = 1 + (floor - 1) * 0.22;
 
-    spawnPoints.forEach((pt) => {
-      const isRare = Math.random() < 0.14;
-      const base = mobTypes[Math.floor(Math.random() * mobTypes.length)];
-      const hp = Math.round(base.hp * scaleMult * (isRare ? 2.2 : 1.0));
-      const atk = Math.round(base.atk * (1 + (floor - 1) * 0.16) * (isRare ? 1.4 : 1.0));
+    if (!isBossFloor) {
+      spawnPoints.forEach((pt) => {
+        const isRare = Math.random() < 0.14;
+        const base = mobTypes[Math.floor(Math.random() * mobTypes.length)];
+        const hp = Math.round(base.hp * scaleMult * (isRare ? 2.2 : 1.0));
+        const atk = Math.round(base.atk * (1 + (floor - 1) * 0.16) * (isRare ? 1.4 : 1.0));
 
-      this.createEnemy({
-        name: isRare ? `★レア・${base.name}` : base.name,
-        x: pt.x,
-        z: pt.z,
-        color: isRare ? 0xffd36a : base.color,
-        scale: base.scale * (isRare ? 1.2 : 1.0),
-        hp,
-        maxHp: hp,
-        atk,
-        speed: base.speed,
-        atkRange: base.range,
-        isBoss: false,
-        isRare,
-        ranged: !!base.ranged,
-        floor
+        this.createEnemy({
+          name: isRare ? `★レア・${base.name}` : base.name,
+          x: pt.x,
+          z: pt.z,
+          color: isRare ? 0xffd36a : base.color,
+          scale: base.scale * (isRare ? 1.2 : 1.0),
+          hp,
+          maxHp: hp,
+          atk,
+          speed: base.speed,
+          atkRange: base.range,
+          isBoss: false,
+          isRare,
+          ranged: !!base.ranged,
+          floor
+        });
       });
-    });
+      return;
+    }
 
-    if (isBossFloor && bossPoint) {
+    // ボス階（X.5F）生成
+    if (bossPoint) {
       const def = getBossDefinition(floor);
-      const bossHp = Math.round(1800 * scaleMult * def.hpMult);
-      const bossAtk = Math.round(26 * (1 + (floor - 1) * 0.15) * def.atkMult);
+      const is50xBoss = (floor === 15 || (floor >= 20 && floor % 10 === 0));
+      const baseBossHp = is50xBoss ? 3800 : 1250;
+      const bossHp = Math.round(baseBossHp * scaleMult * def.hpMult);
+      const bossAtk = Math.round((is50xBoss ? 34 : 20) * (1 + (floor - 1) * 0.14) * def.atkMult);
 
-      const hasBarrierMechanics = (floor === 15 || (floor >= 20 && floor % 10 === 0));
       const weakTypes = ['melee', 'ranged', 'skill'];
 
       const boss = this.createEnemy({
@@ -159,22 +172,21 @@ export class EnemyManager {
         hp: bossHp,
         maxHp: bossHp,
         atk: bossAtk,
-        speed: 0.085,
+        speed: 0.088,
         atkRange: 4.0,
         isBoss: true,
         isRare: false,
         dropWep: def.dropWep,
         floor,
         enraged: false,
+        lastPattern: null,
+        pendingPattern: null,
         hellfireGauge: 0,
         hellfireTick: 0,
-        // 35F ニンジャステルス
         stealthUntil: def.type === 'ninja' ? performance.now() + 4500 : 0,
-        // 15F / 20F+10倍数 無敵バリア閾値
-        hasBarrierMechanics,
-        barrierThresholds: hasBarrierMechanics ? [0.75, 0.50, 0.25] : [],
+        hasBarrierMechanics: is50xBoss,
+        barrierThresholds: is50xBoss ? [0.75, 0.50, 0.25] : [],
         hasBarrier: false,
-        // 300F+ 適応の装甲（弱点ローテーション）
         hasAdaptiveArmor: floor >= 300,
         weakness: weakTypes[Math.floor(Math.random() * weakTypes.length)],
         breakGauge: 0
@@ -231,7 +243,6 @@ export class EnemyManager {
       hornR.rotation.z = -0.3;
       root.add(hornL, hornR);
 
-      // 無敵バリア球体（発動時のみ表示）
       barrierMesh = new THREE.Mesh(
         new THREE.SphereGeometry(1.7 * s, 18, 18),
         new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true, transparent: true, opacity: 0.65 })
@@ -280,7 +291,7 @@ export class EnemyManager {
       hpBarWidth: 1.34 * s,
       state: 'idle',
       stateTimer: 0,
-      patternTimer: 2.8,
+      patternTimer: 2.2,
       dashVel: new THREE.Vector3(),
       stunUntil: 0,
       slowUntil: 0,
@@ -291,13 +302,11 @@ export class EnemyManager {
     return enemy;
   }
 
-  // ---- インフェルノ・サイズ用：ボス側業火ゲージ加算 ----
   addBossHellfire(amount) {
     if (!this.activeBoss) return;
     this.activeBoss.hellfireGauge = Math.min(100, (this.activeBoss.hellfireGauge || 0) + amount);
   }
 
-  // ---- 45F エレメンタリスト反応：プレイヤーがEスキル使用時に追尾弾で自動反撃 ----
   onPlayerSkillUsed(playerPos) {
     const boss = this.activeBoss;
     if (!boss || boss.bossType !== 'elementalist' || boss.hp <= 0) return;
@@ -306,7 +315,6 @@ export class EnemyManager {
     this.fireEnemyOrb(boss, dir, 0.25, true);
   }
 
-  // ---- アストラル・パルス用：範囲内の敵弾消去 ----
   clearProjectilesInRadius(centerPos, radius) {
     let removed = 0;
     this.enemyProjectiles = this.enemyProjectiles.filter((p) => {
@@ -320,19 +328,16 @@ export class EnemyManager {
     return removed;
   }
 
-  // ---- ボス無敵バリアの展開＆解除 ----
   activateBossBarrier(boss) {
     boss.hasBarrier = true;
     if (boss.barrierMesh) boss.barrierMesh.visible = true;
     this.onToast('🛡️ ボスが無敵バリアを展開！四隅の「魔力結晶」を4体破壊せよ！');
 
-    // 既存の破壊可能ブロックを掃除してから四隅に4体召喚
     for (const oldBox of [...this.world.destructibles]) {
       this.world.destroyBlock(oldBox);
     }
-    const corners = [[-16, -16], [16, -16], [-16, 16], [16, 16]];
-    for (const [cx, cz] of corners) {
-      this.world.addDestructibleBlock(cx, 1.0, cz, 0x00ffff, Math.max(40, Math.round(boss.maxHp * 0.04)));
+    for (const c of this.bossRoomCorners) {
+      this.world.addDestructibleBlock(c.x, 1.0, c.z, 0x00ffff, Math.max(40, Math.round(boss.maxHp * 0.04)));
     }
   }
 
@@ -345,13 +350,11 @@ export class EnemyManager {
     this.onToast(msg);
   }
 
-  // ---- ダメージ処理（全固有耐性・反射・ワープ・バリア・適応装甲対応） ----
   damageEnemy(enemy, rawDmg, opts = {}) {
     if (!enemy || enemy.hp <= 0) return false;
     const now = performance.now();
     const cat = opts.attackCategory || 'melee'; // 'melee' | 'ranged' | 'skill'
 
-    // 無敵バリア展開中はダメージ無効
     if (enemy.isBoss && enemy.hasBarrier) {
       const popupPos = enemy.root.position.clone().add(new THREE.Vector3(0, 1.8 * enemy.scale, 0));
       this.onDamagePopup(popupPos, 'BARRIER', false);
@@ -360,20 +363,23 @@ export class EnemyManager {
 
     let dmg = Math.round(rawDmg * (enemy.isBoss ? bossDmgMult() : 1.0));
 
-    // 凍結・スタン特効（無尾モチーフ遺物「蒼焔の狐面」など）
+    // ブレイク中の被ダメージ2.5倍（300.5F+ 適応装甲ブレイク）または通常スタン特効
     if (enemy.stunUntil > now) {
-      const stunBonus = 1.3 + (state.weapon?.type === 'mubi' && state.artifacts?.some?.(a => a?.id === 'motif_mubi') ? 0.55 : 0);
-      dmg = Math.round(dmg * stunBonus);
+      if (enemy.isAdaptiveBroken) {
+        dmg = Math.round(dmg * 2.5);
+      } else {
+        const stunBonus = 1.3 + (state.weapon?.type === 'mubi' && state.artifacts?.some?.(a => a?.id === 'motif_mubi') ? 0.55 : 0);
+        dmg = Math.round(dmg * stunBonus);
+      }
     }
 
-    // 固有ボス耐性・ギミック処理
     if (enemy.isBoss) {
-      // 25F ゴーレム・ガーディアン：遠距離ダメージ50%軽減
+      // 25.5F ゴーレム・ガーディアン：遠距離50%軽減
       if (enemy.bossType === 'golem_guard' && cat === 'ranged') {
         dmg = Math.round(dmg * 0.5);
       }
 
-      // 35F ニンジャ：ステルス解除＆近接攻撃5%反射
+      // 35.5F ニンジャ：ステルス解除＆近接攻撃5%反射
       if (enemy.bossType === 'ninja') {
         enemy.stealthUntil = 0;
         if (cat === 'melee' && opts.playerPos) {
@@ -382,7 +388,7 @@ export class EnemyManager {
         }
       }
 
-      // 55F アンチ・レンジゴーレム：遠距離被弾で60%の確率で目の前へワープ
+      // 55.5F アンチ・レンジゴーレム：遠距離被弾で60%目の前ワープ
       if (enemy.bossType === 'anti_range' && cat === 'ranged' && opts.playerPos && Math.random() < 0.6) {
         const wx = opts.playerPos.x + (Math.random() - 0.5) * 3.0;
         const wz = opts.playerPos.z + (Math.random() - 0.5) * 3.0;
@@ -392,40 +398,44 @@ export class EnemyManager {
         }
       }
 
-      // 60F レッドドラゴン：近接50%軽減＋耐久消耗＋割り込みワープ吸血ブレス
+      // 60.5F レッドドラゴン：近接50%軽減＋耐久消耗＋割り込みワープ吸血ブレス
       if (enemy.bossType === 'red_dragon') {
         if (cat === 'melee') {
           dmg = Math.round(dmg * 0.5);
           if (state.weapon) wear(state.weapon, 4);
         }
         if (opts.playerPos && Math.random() < 0.18) {
+          enemy.state = 'chase';
+          enemy.warnMat.opacity = 0;
           const wx = opts.playerPos.x + (Math.random() - 0.5) * 5.0;
           const wz = opts.playerPos.z + (Math.random() - 0.5) * 5.0;
           if (!this.world.isBlockedForEntity(wx, wz, 1.4)) {
             enemy.root.position.set(wx, 0, wz);
           }
-          enemy.hp = Math.min(enemy.maxHp, enemy.hp + Math.round(enemy.maxHp * 0.05));
           const dir = opts.playerPos.clone().sub(enemy.root.position).setY(0).normalize();
           [-0.25, 0, 0.25].forEach((off) => {
             const d = dir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), off);
-            this.fireEnemyOrb(enemy, d, 0.28);
+            this.fireEnemyOrb(enemy, d, 0.28, false, true); // 命中時ボスHP5%回復する吸血弾
           });
           this.onToast('🐉 レッドドラゴンの割り込み吸血ブレス！');
         }
       }
 
-      // 300F+ 適応の装甲（弱点ローテーション）
-      if (enemy.hasAdaptiveArmor) {
+      // 300.5F+ 適応の装甲（弱点一致1.2倍＋ブレイク蓄積：通常+12% / スキル+22%、不一致0.4倍）
+      if (enemy.hasAdaptiveArmor && enemy.stunUntil <= now) {
+        enemy.isAdaptiveBroken = false;
         if (cat === enemy.weakness) {
           dmg = Math.round(dmg * 1.2);
-          enemy.breakGauge = Math.min(100, enemy.breakGauge + 14);
+          const addBreak = (cat === 'skill') ? 22 : 12;
+          enemy.breakGauge = Math.min(100, enemy.breakGauge + addBreak);
           if (enemy.breakGauge >= 100) {
             enemy.breakGauge = 0;
+            enemy.isAdaptiveBroken = true;
             enemy.stunUntil = now + 3500;
             const weakTypes = ['melee', 'ranged', 'skill'].filter((t) => t !== enemy.weakness);
             enemy.weakness = weakTypes[Math.floor(Math.random() * weakTypes.length)];
             const wLabel = { melee: '近接', ranged: '遠距離', skill: 'スキル/大技' }[enemy.weakness];
-            this.onToast(`💥 装甲ブレイク(3.5秒)！次の弱点は【${wLabel}】！`);
+            this.onToast(`💥 装甲ブレイク(3.5秒・被ダメ2.5倍)！次の弱点は【${wLabel}】！`);
           }
         } else {
           dmg = Math.round(dmg * 0.4);
@@ -450,11 +460,10 @@ export class EnemyManager {
     enemy.hpFill.scale.x = Math.max(0.001, ratio);
     enemy.hpFill.position.x = -(1 - ratio) * (enemy.hpBarWidth * 0.5);
 
-    // ボス激昂状態（HP50%以下）＆無敵バリア閾値チェック
     if (enemy.isBoss && enemy.hp > 0) {
       if (!enemy.enraged && ratio <= 0.5) {
         enemy.enraged = true;
-        this.onToast('💢 ボスが激昂状態に突入！攻撃速度＆弾数増加！');
+        this.onToast('💢 ボスが激昂状態に突入！攻撃CD短縮＆弾幕強化！');
       }
       if (enemy.barrierThresholds.length > 0 && ratio <= enemy.barrierThresholds[0]) {
         enemy.barrierThresholds.shift();
@@ -478,7 +487,7 @@ export class EnemyManager {
     this.scene.remove(enemy.root);
     this.enemies = this.enemies.filter((e) => e !== enemy);
 
-    // 10F以降で手下が倒されるとボスのHPが5%回復
+    // 10.5F以降で手下が倒されるとボスの最大HPの5%回復
     if (!enemy.isBoss && enemy.isSummonedMinion && this.activeBoss && this.activeBoss.floor >= 10) {
       const heal = Math.round(this.activeBoss.maxHp * 0.05);
       this.activeBoss.hp = Math.min(this.activeBoss.maxHp, this.activeBoss.hp + heal);
@@ -487,6 +496,7 @@ export class EnemyManager {
 
     if (this.activeBoss === enemy) {
       this.activeBoss = null;
+      this.clearAllProjectilesAndHazards(); // 撃破時に残存ボス弾幕を全消去
       this.world.unlockExitPortal();
     }
 
@@ -505,7 +515,6 @@ export class EnemyManager {
 
     if (enemy.isBoss) {
       SAVE.cleared = Math.max(SAVE.cleared, enemy.floor);
-      // 10F以降15%でボス専用武器、全階層10%で通常武器、20%で通常遺物
       const rWep = Math.random();
       if (enemy.floor >= 10 && rWep < 0.15) {
         const bw = rollWeapon(enemy.dropWep, enemy.floor);
@@ -519,7 +528,7 @@ export class EnemyManager {
         const art = rollArtifact();
         if (addToPack(art)) this.onToast(`🔮 遺物ドロップ【${art.name}】！`);
       }
-      this.onToast(`🏆 ボス撃破！+${goldGain}G`);
+      this.onToast(`🏆 ${enemy.floor}.5F ボス撃破！階段開放＆ExS+40%`);
     } else if (Math.random() < (enemy.isRare ? 0.65 : DROP_RATE)) {
       const r = Math.random();
       let drop = null;
@@ -539,10 +548,10 @@ export class EnemyManager {
     saveGame();
   }
 
-  fireEnemyOrb(enemy, dir, speed = 0.25, homing = false) {
+  fireEnemyOrb(enemy, dir, speed = 0.25, homing = false, lifesteal = false) {
     const mesh = new THREE.Mesh(
       new THREE.SphereGeometry(0.35, 10, 10),
-      new THREE.MeshBasicMaterial({ color: homing ? 0xff00ff : enemy.color })
+      new THREE.MeshBasicMaterial({ color: lifesteal ? 0xff1144 : homing ? 0xff00ff : enemy.color })
     );
     mesh.position.copy(enemy.root.position).add(new THREE.Vector3(0, 1.2 * enemy.scale, 0));
     this.scene.add(mesh);
@@ -552,35 +561,70 @@ export class EnemyManager {
       vel: dir.clone().multiplyScalar(speed),
       atk: enemy.atk,
       life: 3.5,
-      homing
+      homing,
+      lifesteal,
+      ownerBoss: enemy.isBoss ? enemy : null
     });
   }
 
-  // ---- ボスの階層解禁攻撃パターン実行 ----
-  executeBossPattern(boss, playerPos) {
-    const f = boss.floor;
-    const enraged = boss.enraged;
-    const warnMult = enraged ? 0.7 : 1.0;
+  // ---- 最も近いターゲット（プレイヤー または 味方召喚ビット）を取得 ----
+  getNearestTargetPos(bossPos, player) {
+    let bestPos = player.root.position.clone();
+    let minDist = bossPos.distanceTo(bestPos);
 
-    // 解禁済みパターン候補を収集
+    if (player.astralBits && player.astralBits.length > 0) {
+      for (const b of player.astralBits) {
+        const d = bossPos.distanceTo(b.mesh.position);
+        if (d < minDist) {
+          minDist = d;
+          bestPos = b.mesh.position.clone();
+        }
+      }
+    }
+    return { pos: bestPos, dist: minDist };
+  }
+
+  // ---- 前回と同じ技を避けて攻撃パターンを選択し、赤い予兆フェーズへ移行 ----
+  beginBossPatternWindup(boss) {
+    const f = boss.floor;
+    const warnMult = boss.enraged ? 0.7 : 1.0;
+
     const pool = ['omni', 'fan', 'dash'];
     if (f >= 3) pool.push('summon', 'homing');
     if (f >= 5) pool.push('shockwave');
     if (f >= 10) pool.push('eruption');
     if (f >= 15) pool.push('blaster');
 
-    const pick = pool[Math.floor(Math.random() * pool.length)];
-    const toP = playerPos.clone().sub(boss.root.position).setY(0).normalize();
+    // 前回と同じ技は選ばない
+    const candidates = pool.filter((p) => p !== boss.lastPattern);
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    boss.lastPattern = pick;
+    boss.pendingPattern = pick;
+
+    const baseWarn = {
+      omni: 0.8, fan: 0.6, dash: 0.9, summon: 1.0,
+      homing: 0.7, shockwave: 1.1, eruption: 1.8, blaster: 1.2
+    }[pick] || 0.8;
+
+    boss.state = 'pattern_windup';
+    boss.stateTimer = baseWarn * warnMult;
+    boss.maxWindupTimer = boss.stateTimer;
+  }
+
+  // ---- 予兆完了後のボス攻撃実行 ----
+  executeBossPattern(boss, targetPos) {
+    const pick = boss.pendingPattern;
+    const f = boss.floor;
+    const enraged = boss.enraged;
+    const toP = targetPos.clone().sub(boss.root.position).setY(0).normalize();
 
     if (pick === 'omni') {
-      // 全方位弾（12発 / 激昂時18発）
       const count = enraged ? 18 : 12;
       for (let i = 0; i < count; i++) {
         const ang = (Math.PI * 2 * i) / count;
         this.fireEnemyOrb(boss, new THREE.Vector3(Math.cos(ang), 0, Math.sin(ang)), 0.24);
       }
     } else if (pick === 'fan') {
-      // 扇状射撃（5発 / 激昂時7発）
       const count = enraged ? 7 : 5;
       const spread = 0.16;
       for (let i = 0; i < count; i++) {
@@ -589,12 +633,11 @@ export class EnemyManager {
         this.fireEnemyOrb(boss, d, 0.27);
       }
     } else if (pick === 'dash') {
-      // 高速突進（接触ダメージ1.5倍）
       boss.state = 'dash';
       boss.stateTimer = 0.55;
       boss.dashVel.copy(toP).multiplyScalar(0.36);
+      return;
     } else if (pick === 'summon') {
-      // 手下召喚（最大5体まで）
       const minionCount = this.enemies.filter((e) => !e.isBoss).length;
       if (minionCount < 5) {
         const addCount = enraged ? 2 : 1;
@@ -615,25 +658,23 @@ export class EnemyManager {
         this.onToast('👾 ボスが手下を召喚した！');
       }
     } else if (pick === 'homing') {
-      // 追尾弾（3.5秒間追尾）
       this.fireEnemyOrb(boss, toP, 0.21, true);
     } else if (pick === 'shockwave') {
-      // 周囲衝撃波
-      this.spawnHazardZone(boss.root.position.x, boss.root.position.z, 6.2, 1.1 * warnMult, Math.round(boss.atk * 1.3), 0xb15cff, false);
+      this.spawnHazardZone(boss.root.position.x, boss.root.position.z, 6.2, 0.35, Math.round(boss.atk * 1.3), 0xb15cff, false);
     } else if (pick === 'eruption') {
-      // 【大噴火】安全地帯リング以外を焼き払う全体攻撃！
       this.onToast('🌋 大噴火！足元の「緑の安全地帯円」に留まれ！');
-      this.spawnHazardZone(playerPos.x, playerPos.z, 6.5, 1.8 * warnMult, Math.round(boss.atk * 1.8), 0x48bb78, true);
+      this.spawnHazardZone(targetPos.x, targetPos.z, 6.8, 0.85, Math.round(boss.atk * 1.8), 0x48bb78, true);
     } else if (pick === 'blaster') {
-      // 【ガスターブラスター】3〜4基の照準レーザー照射
       const count = enraged ? 4 : 3;
       this.onToast('⚡ ガスターブラスター照準！射線から離れろ！');
       for (let i = 0; i < count; i++) {
-        const bx = playerPos.x + (Math.random() - 0.5) * 10;
-        const bz = playerPos.z + (Math.random() - 0.5) * 10;
-        this.spawnHazardZone(bx, bz, 2.4, 1.2 * warnMult, Math.round(boss.atk * 1.6), 0x00ffff, false);
+        const bx = targetPos.x + (Math.random() - 0.5) * 10;
+        const bz = targetPos.z + (Math.random() - 0.5) * 10;
+        this.spawnHazardZone(bx, bz, 2.4, 0.7, Math.round(boss.atk * 1.6), 0x00ffff, false);
       }
     }
+
+    boss.state = 'chase';
   }
 
   spawnHazardZone(x, z, radius, delaySec, atk, color, isSafeZone = false) {
@@ -664,12 +705,10 @@ export class EnemyManager {
     const now = performance.now();
     const pPos = player.root.position;
 
-    // ボス無敵バリアの魔力結晶全破壊チェック
     if (this.activeBoss && this.activeBoss.hasBarrier && this.world.destructibles.length === 0) {
       this.breakBossBarrier();
     }
 
-    // ボス側「業火ゲージ」の毎秒スリップダメージ（インフェルノ・サイズ用）
     if (this.activeBoss && this.activeBoss.hellfireGauge > 0 && this.activeBoss.hp > 0) {
       this.activeBoss.hellfireTick += dt;
       if (this.activeBoss.hellfireTick >= 1.0) {
@@ -679,17 +718,13 @@ export class EnemyManager {
       }
     }
 
-    // 予兆ゾーン（大噴火・ブラスター・衝撃波）の更新
     this.hazardZones = this.hazardZones.filter((h) => {
       h.timer -= dt;
       h.mesh.material.opacity = 0.3 + (1 - Math.max(0, h.timer / h.maxTimer)) * 0.6;
       if (h.timer <= 0) {
         const dist = Math.hypot(pPos.x - h.pos.x, pPos.z - h.pos.z);
         if (h.isSafeZone) {
-          // 大噴火：安全地帯の外側にいたら被弾！
-          if (dist > h.radius) {
-            player.receiveEnemyAttack(h.atk, h.pos);
-          }
+          if (dist > h.radius) player.receiveEnemyAttack(h.atk, h.pos);
         } else {
           for (let i = 0; i < 8; i++) {
             this.world.spawnHitSpark(h.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), h.color);
@@ -708,7 +743,6 @@ export class EnemyManager {
       enemy.hpBg.lookAt(this.camera.position);
       enemy.hpFill.lookAt(this.camera.position);
 
-      // 35F ニンジャのステルス透明度
       if (enemy.bossType === 'ninja') {
         enemy.mat.opacity = now < enemy.stealthUntil ? 0.12 : 1.0;
       }
@@ -716,6 +750,11 @@ export class EnemyManager {
       if (now < enemy.hitFlashUntil) {
         enemy.mat.emissive.setHex(0xffffff);
         enemy.mat.emissiveIntensity = 0.85;
+      } else if (enemy.state === 'pattern_windup') {
+        // 赤い予兆表示（本体点滅）
+        const blink = Math.sin(now * 0.035) > 0;
+        enemy.mat.emissive.setHex(blink ? 0xff1133 : enemy.color);
+        enemy.mat.emissiveIntensity = blink ? 0.9 : 0.25;
       } else {
         enemy.mat.emissive.setHex(enemy.color);
         enemy.mat.emissiveIntensity = enemy.isBoss ? 0.25 : 0.1;
@@ -728,35 +767,55 @@ export class EnemyManager {
 
       const speedMult = now < enemy.slowUntil ? 0.45 : 1.0;
 
-      // ボスの階層解禁攻撃パターンタイマー（激昂時2.2秒→1.4秒）
-      if (enemy.isBoss && enemy.state !== 'dash') {
-        enemy.patternTimer -= dt;
-        if (enemy.patternTimer <= 0) {
-          enemy.patternTimer = enemy.enraged ? 1.4 : 2.2;
-          this.executeBossPattern(enemy, pPos);
+      // ボスのターゲット取得（プレイヤー＆味方ビットの最寄り対象、索敵範囲26m）
+      const targetInfo = enemy.isBoss
+        ? this.getNearestTargetPos(enemy.root.position, player)
+        : { pos: pPos, dist: enemy.root.position.distanceTo(pPos) };
+
+      const tPos = targetInfo.pos;
+      const toTarget = new THREE.Vector3(tPos.x - enemy.root.position.x, 0, tPos.z - enemy.root.position.z);
+      const dist = toTarget.length();
+      const dir = dist > 0.01 ? toTarget.clone().normalize() : new THREE.Vector3(0, 0, 1);
+
+      // ボスの行動サイクル（距離28m以内かつCD完了時に前回と違う技を選択→予兆→実行）
+      if (enemy.isBoss) {
+        if (enemy.state === 'pattern_windup') {
+          enemy.stateTimer -= dt;
+          enemy.warnMat.opacity = 0.45;
+          if (enemy.stateTimer <= 0) {
+            enemy.warnMat.opacity = 0;
+            this.executeBossPattern(enemy, tPos);
+          }
+          continue;
+        }
+
+        if (enemy.state === 'dash') {
+          enemy.stateTimer -= dt;
+          const nx = enemy.root.position.x + enemy.dashVel.x * speedMult;
+          const nz = enemy.root.position.z + enemy.dashVel.z * speedMult;
+          if (!this.world.isBlockedForEntity(nx, nz, 0.5 * enemy.scale)) {
+            enemy.root.position.set(nx, 0, nz);
+          }
+          if (enemy.root.position.distanceTo(pPos) < 1.8 * enemy.scale) {
+            player.receiveEnemyAttack(Math.round(enemy.atk * 1.5), enemy.root.position);
+          }
+          if (enemy.stateTimer <= 0) enemy.state = 'chase';
+          continue;
+        }
+
+        if (dist <= 28) {
+          enemy.patternTimer -= dt;
+          if (enemy.patternTimer <= 0) {
+            enemy.patternTimer = enemy.enraged ? 1.4 : 2.2;
+            this.beginBossPatternWindup(enemy);
+            continue;
+          }
         }
       }
 
-      // ボス突進状態
-      if (enemy.state === 'dash') {
-        enemy.stateTimer -= dt;
-        const nx = enemy.root.position.x + enemy.dashVel.x * speedMult;
-        const nz = enemy.root.position.z + enemy.dashVel.z * speedMult;
-        if (!this.world.isBlockedForEntity(nx, nz, 0.5 * enemy.scale)) {
-          enemy.root.position.set(nx, 0, nz);
-        }
-        if (enemy.root.position.distanceTo(pPos) < 1.8 * enemy.scale) {
-          player.receiveEnemyAttack(Math.round(enemy.atk * 1.5), enemy.root.position);
-        }
-        if (enemy.stateTimer <= 0) enemy.state = 'chase';
-        continue;
-      }
-
-      const toPlayer = new THREE.Vector3(pPos.x - enemy.root.position.x, 0, pPos.z - enemy.root.position.z);
-      const dist = toPlayer.length();
-      const dir = dist > 0.01 ? toPlayer.clone().normalize() : new THREE.Vector3(0, 0, 1);
-
-      if (!enemy.isBoss && dist > 22 && enemy.state === 'idle') continue;
+      // 通常敵は22m以内で索敵、ボスは26m以内で追跡
+      const aggroRange = enemy.isBoss ? 26 : 22;
+      if (dist > aggroRange && enemy.state === 'idle') continue;
 
       if (enemy.state === 'idle' || enemy.state === 'chase') {
         enemy.state = 'chase';
@@ -812,6 +871,10 @@ export class EnemyManager {
       const dPlayer = p.mesh.position.distanceTo(pPos.clone().add(new THREE.Vector3(0, 1.0, 0)));
       if (dPlayer < 0.85) {
         player.receiveEnemyAttack(p.atk, p.mesh.position);
+        // 60.5F レッドドラゴン吸血ブレス命中時、ボス最大HP5%回復
+        if (p.lifesteal && p.ownerBoss && p.ownerBoss.hp > 0) {
+          p.ownerBoss.hp = Math.min(p.ownerBoss.maxHp, p.ownerBoss.hp + Math.round(p.ownerBoss.maxHp * 0.05));
+        }
         this.scene.remove(p.mesh);
         return false;
       }
