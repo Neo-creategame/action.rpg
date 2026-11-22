@@ -86,14 +86,13 @@ export class World {
     }
   }
 
-  // ---- 広大＆立体3Dダンジョン生成 ----
-  buildFloor(floor) {
+  // ---- 広大＆立体3Dダンジョン生成（通常階 / ボス階 X.5F 分岐） ----
+  buildFloor(floor, isBossFloor = false) {
     this.clearDungeon();
-    const isBossFloor = floor % 5 === 0;
 
-    // 広大な石畳フロア（220m × 220m）
+    // 広大な石畳フロア（240m × 240m）
     const floorMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(220, 220),
+      new THREE.PlaneGeometry(240, 240),
       new THREE.MeshStandardMaterial({ map: this.floorTex, roughness: 0.85 })
     );
     floorMesh.rotation.x = -Math.PI / 2;
@@ -105,22 +104,20 @@ export class World {
       return this.buildBossArena(floor);
     }
 
-    // 41×41マスの広大迷宮（約185m四方）
+    // 以下、通常の41×41迷宮生成（フェーズ5と同一）
     const W = 41;
     const H = 41;
     const grid = Array.from({ length: H }, () => Array(W).fill(1));
     const rooms = [];
     const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 
-    // 1.大小さまざまな部屋を最大12個配置（大広間・中部屋・小宝物庫）
     for (let t = 0; t < 90 && rooms.length < 12; t++) {
-      const isGrand = rooms.length === 2 || rooms.length === 5; // 大広間を混ぜる
+      const isGrand = rooms.length === 2 || rooms.length === 5;
       const rw = isGrand ? randInt(6, 8) : randInt(3, 5);
       const rh = isGrand ? randInt(6, 8) : randInt(3, 5);
       const rx = randInt(2, W - rw - 3);
       const ry = randInt(2, H - rh - 3);
 
-      // 部屋同士の間隔を2マス以上空けて回廊が入り組むようにする
       if (rooms.some((r) => !(rx + rw + 2 < r.x || r.x + r.w + 2 < rx || ry + rh + 2 < r.y || r.y + r.h + 2 < ry))) {
         continue;
       }
@@ -140,7 +137,6 @@ export class World {
       }
     }
 
-    // 2. メイン接続＋ループ接続（行き止まりだけでなく周回ルートを作る）
     const carveCorridor = (x1, y1, x2, y2, width = 1) => {
       let x = x1;
       let y = y1;
@@ -165,9 +161,7 @@ export class World {
     };
 
     for (let i = 1; i < rooms.length; i++) {
-      // 隣接部屋と接続
       carveCorridor(rooms[i - 1].cx, rooms[i - 1].cy, rooms[i].cx, rooms[i].cy, 1);
-      // 40%の確率で別の離れた部屋とも繋いでループ（分岐迷路）を形成
       if (i >= 2 && Math.random() < 0.45) {
         const other = rooms[randInt(0, i - 2)];
         carveCorridor(rooms[i].cx, rooms[i].cy, other.cx, other.cy, 1);
@@ -177,12 +171,10 @@ export class World {
     const toWorldX = (gx) => (gx - Math.floor(W / 2)) * TILE_SIZE;
     const toWorldZ = (gy) => (gy - Math.floor(H / 2)) * TILE_SIZE;
 
-    // 3. InstancedMeshで外壁・迷宮壁を一括高速描画
     const wallPositions = [];
     for (let gy = 0; gy < H; gy++) {
       for (let gx = 0; gx < W; gx++) {
         if (grid[gy][gx] === 1) {
-          // 通路や部屋に隣接している壁だけ生成（見えない外側の壁を省いて超軽量化）
           const hasOpenNeighbor =
             (grid[gy - 1]?.[gx] === 0) || (grid[gy + 1]?.[gx] === 0) ||
             (grid[gy]?.[gx - 1] === 0) || (grid[gy]?.[gx + 1] === 0) ||
@@ -202,19 +194,16 @@ export class World {
     const endRoom = rooms[rooms.length - 1];
     this.createExitPortal(toWorldX(endRoom.cx), toWorldZ(endRoom.cy), false);
 
-    // 4. 各部屋に立体ギミック・敵・宝箱・回復の泉・罠を配置
     const spawnPoints = [];
     for (let i = 1; i < rooms.length; i++) {
       const r = rooms[i];
       const rcx = toWorldX(r.cx);
       const rcz = toWorldZ(r.cy);
 
-      // 大広間には「高台プラットフォーム＋階段ステップ＋上の宝箱」を生成！
       if (r.isGrand) {
         this.buildElevatedPlatform(rcx, rcz, 7.0, 2.0, 7.0);
-        this.spawnChest(rcx, 2.0, rcz, true, floor); // 高台の上にレア宝箱
+        this.spawnChest(rcx, 2.0, rcz, true, floor);
       } else {
-        // 通常部屋には35%で宝箱、20%で回復の泉
         const roll = Math.random();
         if (roll < 0.35 && r !== endRoom) {
           this.spawnChest(rcx, 0, rcz, false, floor);
@@ -223,7 +212,6 @@ export class World {
         }
       }
 
-      // モンスター配置（大広間は2〜4体、通常部屋は1〜2体）
       const mobCount = r.isGrand ? randInt(2, 4) : randInt(1, 2);
       for (let c = 0; c < mobCount; c++) {
         const sx = toWorldX(r.x + 1 + Math.floor(Math.random() * Math.max(1, r.w - 2)));
@@ -231,14 +219,12 @@ export class World {
         spawnPoints.push({ x: sx, z: sz });
       }
 
-      // トゲ罠の配置（35%の部屋）
       if (!r.isGrand && r !== endRoom && Math.random() < 0.35) {
         const tx = toWorldX(r.x + 1);
         const tz = toWorldZ(r.y + 1);
         this.spawnSpikeTrap(tx, tz, 14 + floor * 3);
       }
 
-      // 破壊可能な魔力結晶スタック
       if (Math.random() < 0.55) {
         const bx = toWorldX(r.x + r.w - 1);
         const bz = toWorldZ(r.y + 1);
@@ -250,21 +236,84 @@ export class World {
     return {
       playerStart: new THREE.Vector3(toWorldX(startRoom.cx), 0, toWorldZ(startRoom.cy)),
       spawnPoints,
-      bossPoint: null
+      bossPoint: null,
+      bossRoomBounds: null
     };
   }
 
-  // ---- ボス階層（5Fごとの巨大コロシアム） ----
+  // ---- ボス階（X.5F）：開始部屋（8×8タイル）＋ボス部屋（22×20タイル）の2部屋固定生成 ----
   buildBossArena(floor) {
-    const R = 10; // 90m四方の巨大アリーナ
+    // グリッド上で2部屋と連絡通路を作成（1タイル = TILE_SIZE = 4.5m）
+    const W = 26;
+    const H = 34;
+    const grid = Array.from({ length: H }, () => Array(W).fill(1));
+
+    // 1. ボス部屋（北側：幅22タイル × 奥行き20タイル、x: 2..23, y: 2..21）
+    for (let y = 2; y < 22; y++) {
+      for (let x = 2; x < 24; x++) {
+        grid[y][x] = 0;
+      }
+    }
+
+    // 2. 連絡通路（幅3タイル、x: 11..13, y: 22..23）
+    for (let y = 22; y < 24; y++) {
+      for (let x = 11; x <= 14; x++) {
+        grid[y][x] = 0;
+      }
+    }
+
+    // 3. 開始部屋（南側：8×8タイル、x: 9..16, y: 24..31）
+    for (let y = 24; y < 32; y++) {
+      for (let x = 9; x < 17; x++) {
+        grid[y][x] = 0;
+      }
+    }
+
+    const toWorldX = (gx) => (gx - 12.5) * TILE_SIZE;
+    const toWorldZ = (gy) => (gy - 16.0) * TILE_SIZE;
+
     const wallPositions = [];
-    for (let gx = -R; gx <= R; gx++) {
-      for (let gz = -R; gz <= R; gz++) {
-        if (Math.abs(gx) === R || Math.abs(gz) === R) {
-          wallPositions.push({ x: gx * TILE_SIZE, z: gz * TILE_SIZE });
+    for (let gy = 0; gy < H; gy++) {
+      for (let gx = 0; gx < W; gx++) {
+        if (grid[gy][gx] === 1) {
+          const hasOpenNeighbor =
+            (grid[gy - 1]?.[gx] === 0) || (grid[gy + 1]?.[gx] === 0) ||
+            (grid[gy]?.[gx - 1] === 0) || (grid[gy]?.[gx + 1] === 0) ||
+            (grid[gy - 1]?.[gx - 1] === 0) || (grid[gy - 1]?.[gx + 1] === 0) ||
+            (grid[gy + 1]?.[gx - 1] === 0) || (grid[gy + 1]?.[gx + 1] === 0);
+
+          if (hasOpenNeighbor) {
+            wallPositions.push({ x: toWorldX(gx), z: toWorldZ(gy) });
+          }
         }
       }
     }
+
+    this.buildInstancedDungeonWalls(wallPositions, 0x3b1832);
+
+    // 開始部屋の中央（x: 12.5, y: 28）にプレイヤー配置＆回復の泉
+    const startX = toWorldX(12.5);
+    const startZ = toWorldZ(28);
+    this.spawnFountain(startX - 6, startZ);
+
+    // ボス部屋の四隅座標（無敵バリアの魔力結晶4体召喚用）
+    const bossRoomCorners = [
+      { x: toWorldX(4),  z: toWorldZ(4) },
+      { x: toWorldX(21), z: toWorldZ(4) },
+      { x: toWorldX(4),  z: toWorldZ(19) },
+      { x: toWorldX(21), z: toWorldZ(19) }
+    ];
+
+    // ボス部屋奥（x: 12.5, y: 4）に封印された階段ポータル
+    this.createExitPortal(toWorldX(12.5), toWorldZ(4), true);
+
+    return {
+      playerStart: new THREE.Vector3(startX, 0, startZ),
+      spawnPoints: [],
+      bossPoint: { x: toWorldX(12.5), z: toWorldZ(11) },
+      bossRoomCorners
+    };
+  }
     this.buildInstancedDungeonWalls(wallPositions, 0x3b1832);
 
     // 4隅に高台と破壊可能魔力結晶柱
