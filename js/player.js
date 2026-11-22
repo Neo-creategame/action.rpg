@@ -4,7 +4,7 @@ import {
 } from './data.js';
 import {
   state, EQUIPPED, maxHp, atkTotal, takeDamage, wear, wearArmor,
-  hasSynergy, artifactStat, rollWeapon, saveGame
+  hasSynergy, artifactStat, saveGame
 } from './save.js';
 
 const PLAYER_HEIGHT = 2.2;
@@ -27,20 +27,28 @@ export class Player {
 
     this.hp = maxHp();
 
-    // Legend武器固有ゲージ・状態
-    this.souenGauge = 0;     // 無尾
-    this.apoGauge = 0;       // アポカリプス
-    this.starGauge = 0;      // アストラル・オーブ
-    this.chronosGauge = 0;   // クロノスボウ
-    this.scytheSouls = 0;    // インフェルノ・サイズ魂スタック
+    // Legend武器固有ゲージ
+    this.souenGauge = 0;     // 無尾（最大120）
+    this.apoGauge = 0;       // アポカリプス（最大100）
+    this.starGauge = 0;      // アストラル・オーブ（最大100）
+    this.chronosGauge = 0;   // クロノス・ボウ（最大100）
 
-    // アストラル・オーブの浮遊ビット群
+    // アストラル・ビット（Qスキル）
     this.astralBits = [];
     this.bitActiveUntil = 0;
     this.bitFireTimer = 0;
 
-    // 落下メテオ・光線・魔力柱などの3Dスキル演出オブジェクト
+    // クロノ・オーラ（Qスキル）＆ エンド・オブ・タイム（Zスキル）
+    this.chronoAuraMesh = null;
+    this.chronoAuraUntil = 0;
+    this.chronoTickTimer = 0;
+    this.timeStopUntil = 0;
+    this.timeStopHits = new Map(); // enemy -> hitCount
+
+    // ブラックホール（アポカリプスQ）＆ 落下メテオ
+    this.blackHoles = [];
     this.skillObjects = [];
+    this.exsRegenAcc = 0;
 
     this.root = new THREE.Group();
     this.root.position.set(0, 0, 6);
@@ -102,7 +110,6 @@ export class Player {
     visor.position.set(0, 1.78, -0.26);
     this.model.add(visor);
 
-    // 右手武器ピボット
     this.swordPivot = new THREE.Group();
     this.swordPivot.position.set(0.5, 1.1, -0.1);
     this.model.add(this.swordPivot);
@@ -117,7 +124,6 @@ export class Player {
     this.bladeMesh.rotation.x = -0.35;
     this.swordPivot.add(this.bladeMesh);
 
-    // 左手武器メッシュ（双剣装備時のみ表示）
     this.offhandMesh = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.15, 0.14), this.bladeMat);
     this.offhandMesh.position.set(-0.5, 1.1, -0.3);
     this.offhandMesh.rotation.x = -0.45;
@@ -245,43 +251,50 @@ export class Player {
   }
 
   // ==========================================
-  // 1. 通常攻撃（全武器種の固有アクション）
+  // 1. 通常攻撃（仕様準拠）
   // ==========================================
   triggerAttack() {
     const now = performance.now();
     const w = state.weapon;
     if (!w || now < this.nextAtkTime || now < this.dodgeUntil) return;
 
-    this.nextAtkTime = now + w.cd;
+    // 時間停止中は攻撃速度2倍（CD半減）
+    const cdMult = now < this.timeStopUntil ? 0.5 : 1.0;
+    this.nextAtkTime = now + Math.round(w.cd * cdMult);
     this.comboStep = (this.comboStep % 3) + 1;
     this.comboResetTimer = now + 950;
 
-    // インフェルノ・サイズの魂スタックによる攻撃力ボーナス
-    const soulMult = (w.type === 'inferno_scythe') ? (1 + this.scytheSouls * 0.03) : 1.0;
-    const dmg = Math.round(atkTotal(this.hp) * soulMult);
+    const dmg = atkTotal(this.hp);
     const isThird = this.comboStep === 3;
 
-    // 遠距離武器種
+    // --- 遠距離武器 ---
     if (RANGED_WEAPON_TYPES.includes(w.type)) {
       this.model.rotation.y = this.yaw;
       if (w.type === 'astral_orb') {
-        const angles = hasSynergy('awake_astral') ? [-0.18, 0, 0.18] : [-0.12, 0.12];
-        angles.forEach((off) => this.fireProjectile(off, Math.round(dmg * 0.65), 0x10b981, { homing: true, starPerHit: 6 }));
+        // 通常攻撃: 軽くホーミングする光弾2WAY（モチーフで3WAY化、各60%ダメージ / 1ヒットにつき星力+6）
+        const angles = hasSynergy('awake_astral') ? [-0.18, 0, 0.18] : [-0.11, 0.11];
+        angles.forEach((off) => this.fireProjectile(off, Math.round(dmg * 0.6), 0x10b981, {
+          homing: true, starPerHit: 6, attackCategory: 'ranged'
+        }));
       } else if (w.type === 'chronos_bow') {
-        this.fireProjectile(0, dmg, 0x3b82f6, { pierce: true, isChronosArrow: true });
+        // 通常攻撃: 貫通する次元の矢（距離が遠いほど最大1.6倍／モチーフ2.5倍、命中時刻限+8〜16）
+        this.fireProjectile(0, dmg, 0x3b82f6, {
+          pierce: true, isChronosArrow: true, attackCategory: 'ranged'
+        });
       } else if (w.type === 'spellbook') {
         const colors = [0xff4500, 0x00ffff, 0xffd36a];
-        const col = colors[(this.comboStep - 1) % 3];
-        this.fireProjectile(0, Math.round(dmg * 1.15), col, { homing: true });
+        this.fireProjectile(0, Math.round(dmg * 1.15), colors[(this.comboStep - 1) % 3], {
+          homing: true, attackCategory: 'ranged'
+        });
       } else {
         const col = w.type === 'lightning_staff' ? 0xffff00 : w.type === 'eruption_wand' ? 0xff4500 : 0xffd36a;
-        this.fireProjectile(0, dmg, col);
+        this.fireProjectile(0, dmg, col, { attackCategory: 'ranged' });
       }
       wear(w, DURABILITY.weaponAttack);
       return;
     }
 
-    // 近接武器種
+    // --- 近接武器 ---
     const reach = (w.range || 3.2) + (isThird ? 0.65 : 0);
     const colMap = {
       mubi: isThird ? 0x00ffff : 0x38bdf8,
@@ -297,45 +310,57 @@ export class Player {
 
     this.swingSwordAnimation(this.comboStep);
 
-    // 双剣は2連ヒット判定
+    // アポカリプス通常攻撃：斬撃＋60%貫通衝撃波（命中時に終末+12）
+    if (w.type === 'apocalypse') {
+      this.spawnSlashArc(reach, 0xff1144, 1.3);
+      const res = this.performMeleeHit(reach, dmg, 0xff1144, false, isThird, 0, 1.0, 'melee');
+      this.fireProjectile(0, Math.round(dmg * 0.6), 0xff1144, { pierce: true, maxDist: 14, attackCategory: 'melee' });
+      if (res.hits > 0) {
+        const add = Math.round(res.hits * 12 * (hasSynergy('awake_apo') ? 1.5 : 1.0));
+        this.apoGauge = Math.min(100, this.apoGauge + add);
+      }
+      wear(w, DURABILITY.weaponAttack);
+      return;
+    }
+
+    // インフェルノ・サイズ通常攻撃：3段コンボ（1〜2段85%、3段120%＋ボス業火+15%）
+    if (w.type === 'inferno_scythe') {
+      const mult = isThird ? 1.2 : 0.85;
+      this.spawnSlashArc(reach, 0xff5500, isThird ? 1.5 : 1.1);
+      const res = this.performMeleeHit(reach, Math.round(dmg * mult), 0xff5500, true, isThird, 0, 0, 'melee');
+      if (isThird && res.hits > 0 && this.enemyManager.activeBoss) {
+        this.enemyManager.addBossHellfire(15);
+      }
+      wear(w, DURABILITY.weaponAttack);
+      return;
+    }
+
+    // 双剣：2連ヒット
     if (w.type === 'dual') {
       this.spawnSlashArc(reach, color, 0.9);
-      this.performMeleeHit(reach, Math.round(dmg * 0.65), color, false, false);
+      this.performMeleeHit(reach, Math.round(dmg * 0.65), color, false, false, 0, 0, 'melee');
       setTimeout(() => {
         this.spawnSlashArc(reach, 0x00ffff, 1.1);
-        this.performMeleeHit(reach, Math.round(dmg * 0.75), 0x00ffff, false, isThird);
+        this.performMeleeHit(reach, Math.round(dmg * 0.75), 0x00ffff, false, isThird, 0, 0, 'melee');
       }, 90);
       wear(w, DURABILITY.weaponAttack);
       return;
     }
 
-    // 大剣は広範囲扇形＆ノックバック
-    const knockback = (w.type === 'greatsword' || w.type === 'apocalypse') ? 1.4 : 0;
+    const knockback = w.type === 'greatsword' ? 1.4 : 0;
     this.spawnSlashArc(reach, color, w.type === 'greatsword' ? 1.6 : isThird ? 1.4 : 1.0);
     if (isThird || w.type === 'greatsword') this.addCameraShake(0.14, 0.1);
 
-    const res = this.performMeleeHit(reach, Math.round(dmg * (isThird ? 1.25 : 1.0)), color, w.type === 'inferno_scythe', isThird, 0, knockback);
-    if (res.hits > 0) {
-      if (w.type === 'mubi' && isThird) {
-        const add = res.hits * 10 * (hasSynergy('awake_mubi') ? 2 : 1);
-        this.souenGauge = Math.min(120, this.souenGauge + add);
-      }
-      if (w.type === 'apocalypse') {
-        const add = Math.round(res.hits * 12 * (hasSynergy('awake_apo') ? 1.5 : 1.0));
-        this.apoGauge = Math.min(100, this.apoGauge + add);
-      }
-    }
-    if (w.type === 'inferno_scythe' && res.kills > 0) {
-      this.scytheSouls = Math.min(20, this.scytheSouls + res.kills);
-      const heal = Math.round(maxHp() * 0.06 * res.kills);
-      this.hp = Math.min(maxHp(), this.hp + heal);
-      this.onToast(`💀 魂吸収 (${this.scytheSouls}/20) HP +${heal}`);
+    const res = this.performMeleeHit(reach, Math.round(dmg * (isThird ? 1.25 : 1.0)), color, false, isThird, 0, knockback, 'melee');
+    if (res.hits > 0 && w.type === 'mubi' && isThird) {
+      const add = res.hits * 10 * (hasSynergy('awake_mubi') ? 2 : 1);
+      this.souenGauge = Math.min(120, this.souenGauge + add);
     }
     wear(w, DURABILITY.weaponAttack);
   }
 
   // ==========================================
-  // 2. 武器スキル [Eキー]（全武器固有スキル）
+  // 2. Eスキル（仕様準拠・45Fエレメンタリスト反撃連携）
   // ==========================================
   triggerSkill() {
     const now = performance.now();
@@ -345,63 +370,84 @@ export class Player {
     const cdCut = Math.min(0.65, (artifactStat('cdPct') + artifactStat('motif_chronos') + (hasSynergy('chronos_overdrive') ? 15 : 0)) / 100);
     this.nextSkillTime = now + Math.round(w.skill.cd * (1 - cdCut));
 
+    // 45F【魔力反応】エレメンタリストが居ればEスキル使用に反応して反撃！
+    this.enemyManager.onPlayerSkillUsed(this.root.position);
+
     const dmg = atkTotal(this.hp);
     this.model.rotation.y = this.yaw;
 
-    if (w.type === 'bow') {
-      [-0.22, 0, 0.22].forEach((off) => this.fireProjectile(off, dmg, 0xffd36a));
-    } else if (w.type === 'chronos_bow') {
-      // 後方跳躍＋5WAY刻限矢＋周囲減速
-      this.dodgeDir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).normalize();
-      this.dodgeUntil = now + 200;
-      [-0.28, -0.14, 0, 0.14, 0.28].forEach((off) => this.fireProjectile(off, Math.round(dmg * 0.9), 0x93c5fd, { isChronosArrow: true }));
-      this.onSlowMo(0.4);
+    if (w.type === 'mubi') {
+      // 【蒼焔連突】突進攻撃・最大8ヒット（1ヒットにつき蒼焔+3）
+      this.dodgeDir.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
+      this.dodgeUntil = now + 260;
+      for (let i = 0; i < 4; i++) {
+        setTimeout(() => {
+          this.spawnSlashArc(4.8, 0x00ffff, 1.5);
+          const res = this.performMeleeHit(4.8, Math.round(dmg * 0.55), 0x00ffff, false, i === 3, 0, 0, 'skill');
+          if (res.hits > 0) {
+            const add = res.hits * 3 * (hasSynergy('awake_mubi') ? 2 : 1);
+            this.souenGauge = Math.min(120, this.souenGauge + add);
+          }
+        }, i * 55);
+      }
+    } else if (w.type === 'apocalypse') {
+      // 【メテオ・フォール】指定地点周辺に5発の隕石（140%ダメージ＋0.8秒スタン / 1ヒットにつき終末+8）
+      this.callMeteors(5, Math.round(dmg * 1.4), 0xff1144, 800, 8);
     } else if (w.type === 'astral_orb') {
-      // ビット展開（10秒間、周囲を浮遊して自動ホーミング射撃）
-      this.spawnAstralBits(hasSynergy('awake_astral') ? 5 : 3, 10);
-      this.onToast('✨ アストラル・ビット展開！');
+      // 【アストラル・パルス】周囲150px(6.0m)に140%衝撃波＋敵弾消去＋ノックバック（命中1体につき星力+15）
+      this.spawnSlashArc(6.2, 0x10b981, 2.2);
+      const clearedOrbs = this.enemyManager.clearProjectilesInRadius(this.root.position, 7.5);
+      if (clearedOrbs > 0) this.onToast(`✨ 敵弾 ${clearedOrbs}発 消去！`);
+      const res = this.performMeleeHit(6.2, Math.round(dmg * 1.4), 0x10b981, true, true, 0, 2.0, 'skill');
+      if (res.hits > 0) this.starGauge = Math.min(100, this.starGauge + res.hits * 15);
+    } else if (w.type === 'chronos_bow') {
+      // 【バックステップ・アロー】無敵状態で後方ステップ＋前方5方向へ90%扇状射撃
+      this.invulnUntil = Math.max(this.invulnUntil, now + 350);
+      this.dodgeDir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).normalize();
+      this.dodgeUntil = now + 220;
+      [-0.28, -0.14, 0, 0.14, 0.28].forEach((off) => {
+        this.fireProjectile(off, Math.round(dmg * 0.9), 0x93c5fd, { isChronosArrow: true, attackCategory: 'skill' });
+      });
+    } else if (w.type === 'inferno_scythe') {
+      // 【ソウル・ハーベスト】220%広範囲斬撃＋最大HP15%回復＋ボス業火+25%
+      this.spawnSlashArc(6.0, 0xff5500, 2.0);
+      this.addCameraShake(0.2, 0.15);
+      this.performMeleeHit(6.0, Math.round(dmg * 2.2), 0xff5500, true, true, 0, 0, 'skill');
+      const heal = Math.round(maxHp() * 0.15);
+      this.hp = Math.min(maxHp(), this.hp + heal);
+      this.onToast(`🔥 ソウル・ハーベスト！HP +${heal}`);
+      if (this.enemyManager.activeBoss) this.enemyManager.addBossHellfire(25);
+    } else if (w.type === 'bow') {
+      [-0.22, 0, 0.22].forEach((off) => this.fireProjectile(off, dmg, 0xffd36a, { attackCategory: 'skill' }));
     } else if (w.type === 'spellbook') {
-      // 3属性連続魔術バースト
-      this.fireProjectile(-0.15, Math.round(dmg * 1.1), 0xff4500, { homing: true });
-      this.fireProjectile(0, Math.round(dmg * 1.2), 0x00ffff, { homing: true });
-      this.fireProjectile(0.15, Math.round(dmg * 1.1), 0xffd36a, { homing: true });
+      this.fireProjectile(-0.15, Math.round(dmg * 1.1), 0xff4500, { homing: true, attackCategory: 'skill' });
+      this.fireProjectile(0, Math.round(dmg * 1.2), 0x00ffff, { homing: true, attackCategory: 'skill' });
+      this.fireProjectile(0.15, Math.round(dmg * 1.1), 0xffd36a, { homing: true, attackCategory: 'skill' });
     } else if (w.type === 'spear' || w.type === 'dragon_chain') {
-      // 前方突進貫通
       this.dodgeDir.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
       this.dodgeUntil = now + 240;
       this.spawnSlashArc(6.0, 0xe0ffff, 1.5);
-      this.performMeleeHit(6.0, Math.round(dmg * 1.75), 0xe0ffff, false, true, 600);
+      this.performMeleeHit(6.0, Math.round(dmg * 1.75), 0xe0ffff, false, true, 600, 0, 'skill');
     } else if (w.type === 'dual') {
-      // 4連高速乱舞
       for (let i = 0; i < 4; i++) {
         setTimeout(() => {
           this.spawnSlashArc(4.2, i % 2 === 0 ? 0x7cf0a0 : 0x00ffff, 1.3);
-          this.performMeleeHit(4.2, Math.round(dmg * 0.7), 0x7cf0a0, true, i === 3);
+          this.performMeleeHit(4.2, Math.round(dmg * 0.7), 0x7cf0a0, true, i === 3, 0, 0, 'skill');
         }, i * 75);
       }
-    } else if (w.type === 'mubi') {
-      // 蒼焔突進斬り
-      this.dodgeDir.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
-      this.dodgeUntil = now + 230;
-      this.spawnSlashArc(5.5, 0x00ffff, 1.8);
-      const res = this.performMeleeHit(5.5, Math.round(dmg * 1.8), 0x00ffff, false, true);
-      if (res.hits > 0) this.souenGauge = Math.min(120, this.souenGauge + res.hits * 12 * (hasSynergy('awake_mubi') ? 2 : 1));
-    } else if (w.type === 'apocalypse' || w.type === 'eruption_wand') {
-      // 隕石落下（メテオストライク）
-      this.callMeteors(3, Math.round(dmg * 1.3), w.type === 'apocalypse' ? 0xff1144 : 0xff5500);
-      if (w.type === 'apocalypse') this.apoGauge = Math.min(100, this.apoGauge + 20);
+    } else if (w.type === 'eruption_wand') {
+      this.callMeteors(3, Math.round(dmg * 1.3), 0xff5500, 500, 0);
     } else {
-      // 回転斬り・重撃
       this.swingSwordAnimation(3);
       this.spawnSlashArc(5.5, 0xffd36a, 1.8);
       this.addCameraShake(0.18, 0.14);
-      this.performMeleeHit(5.5, Math.round(dmg * 1.65), 0xffd36a, true, true, 0, 1.5);
+      this.performMeleeHit(5.5, Math.round(dmg * 1.65), 0xffd36a, true, true, 0, 1.5, 'skill');
     }
     wear(w, DURABILITY.weaponSkill);
   }
 
   // ==========================================
-  // 3. 固有技 [Qキー]
+  // 3. Qスキル（Legend武器固有Qスキル完全再現）
   // ==========================================
   triggerQSkill() {
     const now = performance.now();
@@ -409,23 +455,79 @@ export class Player {
     const dmg = atkTotal(this.hp);
 
     if (w.type === 'mubi') {
+      // 【蒼焔乱舞】蒼焔80消費。周囲に200%ダメージ×10連撃
       if (this.souenGauge < 80) return this.onToast('蒼焔ゲージ不足 (80必要)');
       this.souenGauge -= 80;
-      this.onToast('🔥 蒼焔乱舞！');
-      this.addCameraShake(0.28, 0.18);
-      for (let i = 0; i < 3; i++) {
+      this.onToast('🔥 蒼焔乱舞（10連撃）！');
+      this.addCameraShake(0.35, 0.2);
+      for (let i = 0; i < 10; i++) {
         setTimeout(() => {
-          this.spawnSlashArc(6.8, 0x00ffff, 2.2);
-          this.performMeleeHit(6.8, Math.round(dmg * 1.6), 0x00ffff, true, true);
-        }, i * 90);
+          this.spawnSlashArc(6.2, i % 2 === 0 ? 0x00ffff : 0x38bdf8, 2.0);
+          this.performMeleeHit(6.2, Math.round(dmg * 2.0), 0x00ffff, true, i === 9, 0, 0, 'skill');
+        }, i * 55);
       }
       return;
     }
+
     if (w.type === 'apocalypse') {
+      // 【終末の審判・ブラックホール】終末60消費。周囲の敵を引き寄せ＋300%×8連撃
       if (this.apoGauge < 60) return this.onToast('終末ゲージ不足 (60必要)');
       this.apoGauge -= 60;
-      this.onToast('🌑 終末の審判（メテオシャワー）！');
-      this.callMeteors(6, Math.round(dmg * 1.5), 0xff1144);
+      this.onToast('🌑 終末の審判・ブラックホール！');
+      this.spawnBlackHole(dmg);
+      return;
+    }
+
+    if (w.type === 'astral_orb') {
+      // 【ビット・サモン】星力50消費。6秒間周囲を公転するビット2基展開（0.8秒毎45%レーザー、命中時星力-5）
+      if (this.starGauge < 50) return this.onToast('星力ゲージ不足 (50必要)');
+      this.starGauge -= 50;
+      this.spawnAstralBits(2, 6);
+      this.onToast('✨ ビット・サモン展開（6秒間）！');
+      return;
+    }
+
+    if (w.type === 'chronos_bow') {
+      // 【クロノ・オーラ】刻限50消費。4秒間周囲に時空結界展開（連射UP＋範囲スロー＆0.5秒毎50%ダメ）
+      if (this.chronosGauge < 50) return this.onToast('刻限ゲージ不足 (50必要)');
+      this.chronosGauge -= 50;
+      this.activateChronoAura(4);
+      this.onToast('⏳ クロノ・オーラ展開（4秒間）！');
+      return;
+    }
+
+    if (w.type === 'inferno_scythe') {
+      // 【ヘルファイア・クラッシュ】ボス業火50%以上で発動。業火全消費し吸引起爆（100%時は現在HP50%消費で最大3600%）
+      const boss = this.enemyManager.activeBoss;
+      if (!boss || boss.hellfireGauge < 50) {
+        return this.onToast('ボスの業火ゲージが50%以上必要です');
+      }
+      const hf = boss.hellfireGauge;
+      boss.hellfireGauge = 0;
+
+      let mult = 24.0 * (hf / 100);
+      if (hf >= 100) {
+        const hpCost = Math.floor(this.hp * 0.5);
+        this.hp = Math.max(1, this.hp - hpCost);
+        mult = 36.0;
+        this.onToast('💥 業火100%起爆！ヘルファイア・クラッシュ (3600%)！');
+      } else {
+        this.onToast(`🔥 ヘルファイア・クラッシュ (${Math.round(mult * 100)}%)！`);
+      }
+
+      // 周囲の雑魚をボス周辺へ吸引＆起爆＋2秒スタン
+      for (const e of [...this.enemyManager.enemies]) {
+        if (!e.isBoss && e.root.position.distanceTo(boss.root.position) <= 10.0) {
+          e.root.position.copy(boss.root.position).add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2));
+        }
+        if (e.root.position.distanceTo(boss.root.position) <= 8.5) {
+          this.enemyManager.damageEnemy(e, Math.round(dmg * mult), {
+            color: 0xff4500, isCrit: true, stunMs: 2000, attackCategory: 'skill'
+          });
+        }
+      }
+      this.addCameraShake(0.4, 0.25);
+      this.spawnSlashArc(8.5, 0xff4500, 2.8);
       return;
     }
 
@@ -433,38 +535,89 @@ export class Player {
     this.nextQTime = now + 4000;
     this.onToast('⚡ 衝撃波！');
     this.spawnSlashArc(5.2, 0x4fd1c5, 2.0);
-    this.performMeleeHit(5.2, Math.round(dmg * 1.5), 0x4fd1c5, true, true);
+    this.performMeleeHit(5.2, Math.round(dmg * 1.5), 0x4fd1c5, true, true, 0, 0, 'skill');
   }
 
   // ==========================================
-  // 4. ExS（終結スキル）[Zキー]（無尾・アポカリプス・ExS3種の固有演出）
+  // 4. Zスキル（Legend専用奥義 & 汎用ExS完全再現）
   // ==========================================
   triggerExS() {
     const w = state.weapon;
     const dmg = atkTotal(this.hp);
 
-    // 無尾専用奥義：「❄️ 霜雪一閃」（空間を切り裂く無数のシアン光線＋凍結スタン）
     if (w.type === 'mubi') {
+      // 【蒼焔・絶対凍結陣】蒼焔120消費。周囲に300%×8連撃＋3秒凍結（解除時30%破砕追撃）
       if (this.souenGauge < 120) return this.onToast('蒼焔ゲージ不足 (120必要)');
       this.souenGauge = 0;
-      this.onToast('❄️ 霜雪一閃！！');
+      this.onToast('❄️ 蒼焔・絶対凍結陣（8連撃＋凍結）！！');
       this.addCameraShake(0.45, 0.28);
-      this.onSlowMo(0.45);
-      this.spawnFrostFlashLines(18);
-      this.performMeleeHit(12.0, Math.round(dmg * 9.5), 0x00ffff, true, true, 3500);
+      this.onSlowMo(0.4);
+      this.spawnFrostFlashLines(20);
+
+      for (let i = 0; i < 8; i++) {
+        setTimeout(() => {
+          this.spawnSlashArc(8.0, 0x00ffff, 2.5);
+          this.performMeleeHit(8.0, Math.round(dmg * 3.0), 0x00ffff, true, true, i === 7 ? 3000 : 0, 0, 'skill');
+        }, i * 65);
+      }
+      // 3秒後の凍結解除時に30%破砕追撃
+      setTimeout(() => {
+        this.onToast('💎 氷結破砕追撃！');
+        this.performMeleeHit(9.0, Math.round(dmg * 0.3 * 8), 0xffffff, true, true, 0, 0, 'skill');
+      }, 3000);
       return;
     }
 
-    // アポカリプス専用奥義：「☄️ アポカリプス・ノヴァ」（超巨大メテオ連打）
     if (w.type === 'apocalypse') {
+      // 【アポカリプス・ノヴァ】終末100消費。3500%ダメージ＋4秒スタン＋ボスバリア破壊＋最大HP30%回復
       if (this.apoGauge < 100) return this.onToast('終末ゲージ不足 (100必要)');
       this.apoGauge = 0;
-      this.onToast('☄️ 終焉奥義【アポカリプス・ノヴァ】！！');
-      this.addCameraShake(0.55, 0.35);
-      this.callMeteors(12, Math.round(dmg * 2.2), 0xff1144);
+      this.onToast('☄️ アポカリプス・ノヴァ（3500%＋バリア破壊）！！');
+      this.addCameraShake(0.6, 0.38);
+      this.spawnSlashArc(12.0, 0xff1144, 3.5);
+      this.callMeteors(8, Math.round(dmg * 1.5), 0xff1144, 1000, 0);
+
+      // ボスの無敵バリアを即座に破壊！
+      if (this.enemyManager.activeBoss && this.enemyManager.activeBoss.hasBarrier) {
+        this.enemyManager.breakBossBarrier('☄️ アポカリプス・ノヴァがボスの無敵バリアを粉砕！');
+      }
+
+      this.performMeleeHit(12.0, Math.round(dmg * 35.0), 0xff1144, true, true, 4000, 0, 'skill');
+      const heal = Math.round(maxHp() * 0.30);
+      this.hp = Math.min(maxHp(), this.hp + heal);
       return;
     }
 
+    if (w.type === 'astral_orb') {
+      // 【アストラル・カノン】星力100消費。直線850px・幅96pxの極太ビームで2800%ダメージ＋2.5秒スタン
+      if (this.starGauge < 100) return this.onToast('星力ゲージ不足 (100必要)');
+      this.starGauge = 0;
+      this.onToast('🌟 アストラル・カノン（2800%極太ビーム）！！');
+      this.fireAstralCannon(Math.round(dmg * 28.0));
+      return;
+    }
+
+    if (w.type === 'chronos_bow') {
+      // 【エンド・オブ・タイム】刻限100消費。4秒間時間停止（解除時に「1800%＋命中数×300%」炸裂）
+      if (this.chronosGauge < 100) return this.onToast('刻限ゲージ不足 (100必要)');
+      this.chronosGauge = 0;
+      this.activateEndOfTime(4, dmg);
+      return;
+    }
+
+    if (w.type === 'inferno_scythe') {
+      // 【メギドフレイム】汎用ExSゲージ100消費。周囲に2500%ダメージ＋2.5秒スタン＋ボス業火+75%
+      if (state.exsGauge < EXS_GAUGE_MAX) return;
+      state.exsGauge = 0;
+      this.onToast('🔥 メギドフレイム（2500%＋業火+75%）！！');
+      this.addCameraShake(0.5, 0.3);
+      this.spawnSlashArc(11.0, 0xff4500, 3.2);
+      this.performMeleeHit(11.0, Math.round(dmg * 25.0), 0xff4500, true, true, 2500, 0, 'skill');
+      if (this.enemyManager.activeBoss) this.enemyManager.addBossHellfire(75);
+      return;
+    }
+
+    // 汎用ExS（ギガ・ブレイカー / 疾風・影閃八重咲き / 百鬼夜行・冥界陣）
     if (state.exsGauge < EXS_GAUGE_MAX) return;
     state.exsGauge = 0;
     const exsId = state.equippedExsId || 'giga_breaker';
@@ -472,20 +625,114 @@ export class Player {
     this.onToast(`💥 ${exsDef.name}！！`);
 
     if (exsId === 'gale_slash') {
-      // 【疾風・影閃八重咲き】周囲の敵へ高速ワープしながら8連撃！
       this.executeGaleSlash8(dmg);
     } else if (exsId === 'pandemonium') {
-      // 【百鬼夜行・冥界陣】範囲内の敵の足元に呪怨の魔力柱が連続発生！
       this.executePandemonium(dmg);
     } else {
-      // 【ギガ・ブレイカー】黄金の超衝撃波＋スタン
       this.addCameraShake(0.4, 0.25);
       this.spawnSlashArc(9.5, 0xffd36a, 2.8);
-      this.performMeleeHit(9.5, Math.round(dmg * 10.0), 0xffd36a, true, true, 3000);
+      this.performMeleeHit(9.5, Math.round(dmg * 10.0), 0xffd36a, true, true, 3000, 0, 'skill');
     }
   }
 
-  // ---- 無尾「霜雪一閃」の3D光線エフェクト ----
+  // ---- アポカリプスQ：ブラックホール生成 ----
+  spawnBlackHole(dmg) {
+    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    const center = this.root.position.clone().addScaledVector(forward, 5.5);
+
+    const sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(1.4, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0x1a0022, wireframe: true })
+    );
+    sphere.position.set(center.x, 1.5, center.z);
+    this.scene.add(sphere);
+
+    this.blackHoles.push({
+      mesh: sphere,
+      pos: center,
+      ticksLeft: 8,
+      tickTimer: 0,
+      dmgPerTick: Math.round(dmg * 3.0)
+    });
+  }
+
+  // ---- アストラルZ：極太直線ビーム（アストラル・カノン） ----
+  fireAstralCannon(totalDmg) {
+    this.addCameraShake(0.45, 0.28);
+    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
+    const length = 34;
+
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.6, 1.6, length, 16),
+      new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.9 })
+    );
+    beam.position.copy(this.root.position).add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(forward, length / 2);
+    beam.rotation.z = Math.PI / 2;
+    beam.rotation.y = this.yaw + Math.PI / 2;
+    this.scene.add(beam);
+    this.slashEffects.push({ mesh: beam, life: 0.55, maxLife: 0.55 });
+
+    // 直線上の敵すべてに2800%＋2.5秒スタン
+    const start = this.root.position;
+    for (const e of [...this.enemyManager.enemies]) {
+      const toE = e.root.position.clone().sub(start).setY(0);
+      const proj = toE.dot(forward);
+      if (proj < 0 || proj > length) continue;
+      const perp = Math.hypot(toE.x - forward.x * proj, toE.z - forward.z * proj);
+      if (perp <= 2.4 + 0.8 * e.scale) {
+        this.enemyManager.damageEnemy(e, totalDmg, {
+          color: 0x10b981, isCrit: true, stunMs: 2500, attackCategory: 'skill'
+        });
+      }
+    }
+  }
+
+  // ---- クロノスQ：時空結界（クロノ・オーラ） ----
+  activateChronoAura(sec) {
+    if (this.chronoAuraMesh) this.scene.remove(this.chronoAuraMesh);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.5, 6.8, 32),
+      new THREE.MeshBasicMaterial({ color: 0x3b82f6, side: THREE.DoubleSide, transparent: true, opacity: 0.35 })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    this.scene.add(ring);
+    this.chronoAuraMesh = ring;
+    this.chronoAuraUntil = performance.now() + sec * 1000;
+    this.chronoTickTimer = 0;
+  }
+
+  // ---- クロノスZ：時間停止（エンド・オブ・タイム） ----
+  activateEndOfTime(sec, baseDmg) {
+    const now = performance.now();
+    this.timeStopUntil = now + sec * 1000;
+    this.timeStopHits.clear();
+    this.onToast('⏱️ エンド・オブ・タイム（4秒間時間停止）！！');
+    this.addCameraShake(0.3, 0.2);
+
+    // 周囲14m以内の敵を4秒間完全停止
+    for (const e of this.enemyManager.enemies) {
+      if (e.root.position.distanceTo(this.root.position) <= 14.0) {
+        e.stunUntil = Math.max(e.stunUntil, this.timeStopUntil);
+        this.timeStopHits.set(e, 0);
+      }
+    }
+
+    // 4秒後の時間停止解除時に炸裂ダメージ！
+    setTimeout(() => {
+      this.onToast('💥 時空崩壊・炸裂ダメージ！！');
+      this.addCameraShake(0.5, 0.3);
+      for (const [e, hitCnt] of this.timeStopHits.entries()) {
+        if (e && e.hp > 0) {
+          const mult = 18.0 + hitCnt * 3.0;
+          this.enemyManager.damageEnemy(e, Math.round(baseDmg * mult), {
+            color: 0x3b82f6, isCrit: true, attackCategory: 'skill'
+          });
+        }
+      }
+      this.timeStopHits.clear();
+    }, sec * 1000);
+  }
+
   spawnFrostFlashLines(count) {
     const center = this.root.position.clone().add(new THREE.Vector3(0, 1.5, 0));
     for (let i = 0; i < count; i++) {
@@ -503,14 +750,12 @@ export class Player {
     }
   }
 
-  // ---- アポカリプス「メテオ落下」演出＆着弾爆発 ----
-  callMeteors(count, dmgPerMeteor, color) {
+  callMeteors(count, dmgPerMeteor, color, stunMs = 800, apoGainPerHit = 0) {
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const baseTarget = this.root.position.clone().addScaledVector(forward, 6.0);
 
     for (let i = 0; i < count; i++) {
       setTimeout(() => {
-        // 敵がいれば敵の頭上を狙い、いなければ前方ランダム地点を狙う
         let targetPos = baseTarget.clone().add(new THREE.Vector3((Math.random() - 0.5) * 10, 0, (Math.random() - 0.5) * 10));
         if (this.enemyManager.enemies.length > 0) {
           const e = this.enemyManager.enemies[i % this.enemyManager.enemies.length];
@@ -530,13 +775,14 @@ export class Player {
           target: targetPos,
           vel: targetPos.clone().sub(meteor.position).normalize().multiplyScalar(0.85),
           dmg: dmgPerMeteor,
-          color
+          color,
+          stunMs,
+          apoGainPerHit
         });
-      }, i * 110);
+      }, i * 100);
     }
   }
 
-  // ---- アストラル・オーブ「浮遊ビット」召喚 ----
   spawnAstralBits(count, durationSec) {
     this.clearAstralBits();
     this.bitActiveUntil = performance.now() + durationSec * 1000;
@@ -555,7 +801,6 @@ export class Player {
     this.astralBits = [];
   }
 
-  // ---- ExS「疾風・影閃八重咲き」8連ワープ斬り ----
   executeGaleSlash8(dmg) {
     this.invulnUntil = performance.now() + 1200;
     for (let i = 0; i < 8; i++) {
@@ -574,12 +819,11 @@ export class Player {
         this.spawnAfterimage();
         this.spawnSlashArc(4.8, 0x7cf0a0, 1.5);
         this.addCameraShake(0.1, 0.08);
-        this.performMeleeHit(4.8, Math.round(dmg * 1.4), 0x7cf0a0, true, true);
+        this.performMeleeHit(4.8, Math.round(dmg * 1.4), 0x7cf0a0, true, true, 0, 0, 'skill');
       }, i * 95);
     }
   }
 
-  // ---- ExS「百鬼夜行・冥界陣」呪怨の魔力柱連発 ----
   executePandemonium(dmg) {
     this.addCameraShake(0.4, 0.25);
     for (let i = 0; i < 10; i++) {
@@ -600,7 +844,9 @@ export class Player {
 
         for (const e of [...this.enemyManager.enemies]) {
           if (e.root.position.distanceTo(pos) <= 2.8) {
-            this.enemyManager.damageEnemy(e, Math.round(dmg * 1.35), { color: 0xb15cff, isCrit: true, stunMs: 1200 });
+            this.enemyManager.damageEnemy(e, Math.round(dmg * 1.35), {
+              color: 0xb15cff, isCrit: true, stunMs: 1200, attackCategory: 'skill'
+            });
           }
         }
       }, i * 85);
@@ -624,8 +870,7 @@ export class Player {
     for (let i = 0; i < 3; i++) setTimeout(() => this.spawnAfterimage(), i * 45);
   }
 
-  // ---- 近接ヒット判定（ヒット数・撃破数・ノックバック対応） ----
-  performMeleeHit(reach, dmg, color, isAllAround = false, isCrit = false, stunMs = 0, knockback = 0) {
+  performMeleeHit(reach, dmg, color, isAllAround = false, isCrit = false, stunMs = 0, knockback = 0, attackCategory = 'melee') {
     const forward = new THREE.Vector3(-Math.sin(this.model.rotation.y), 0, -Math.cos(this.model.rotation.y));
     const origin = this.root.position.clone().add(new THREE.Vector3(0, 1.0, 0));
 
@@ -639,7 +884,12 @@ export class Player {
 
       const dirNorm = new THREE.Vector3(toEnemy.x, 0, toEnemy.z).normalize();
       if (isAllAround || forward.dot(dirNorm) > 0.2 || horizDist < 2.0) {
-        const killed = this.enemyManager.damageEnemy(enemy, dmg, { color, isCrit, stunMs });
+        if (this.timeStopHits.has(enemy)) {
+          this.timeStopHits.set(enemy, this.timeStopHits.get(enemy) + 1);
+        }
+        const killed = this.enemyManager.damageEnemy(enemy, dmg, {
+          color, isCrit, stunMs, attackCategory, playerPos: this.root.position
+        });
         hits++;
         if (killed) kills++;
         else if (knockback > 0 && !enemy.isBoss) {
@@ -697,6 +947,7 @@ export class Player {
       dmg,
       color,
       hitSet: new Set(),
+      attackCategory: opts.attackCategory || 'ranged',
       ...opts
     });
   }
@@ -729,14 +980,27 @@ export class Player {
             p.mesh.position.y >= 0 && p.mesh.position.y <= 2.3 * enemy.scale) {
           p.hitSet.add(enemy);
           let finalDmg = p.dmg;
+
           if (p.isChronosArrow) {
             const ratio = Math.min(1, traveled / 25);
-            finalDmg = Math.round(p.dmg * (1 + (hasSynergy('awake_chronos') ? 1.5 : 0.6) * ratio));
-            this.chronosGauge = Math.min(100, this.chronosGauge + Math.round((8 + 8 * ratio) * (hasSynergy('awake_chronos') ? 1.5 : 1)));
+            const maxBonus = hasSynergy('awake_chronos') ? 1.5 : 0.6;
+            finalDmg = Math.round(p.dmg * (1 + maxBonus * ratio));
+            const gain = Math.round((8 + 8 * ratio) * (hasSynergy('awake_chronos') ? 1.5 : 1));
+            this.chronosGauge = Math.min(100, this.chronosGauge + gain);
           }
-          if (p.starPerHit) this.starGauge = Math.min(100, this.starGauge + p.starPerHit);
+          if (p.starPerHit) {
+            this.starGauge = Math.min(100, this.starGauge + p.starPerHit);
+          }
+          if (p.isBitLaser && !hasSynergy('awake_astral')) {
+            this.starGauge = Math.max(0, this.starGauge - 5);
+          }
+          if (this.timeStopHits.has(enemy)) {
+            this.timeStopHits.set(enemy, this.timeStopHits.get(enemy) + 1);
+          }
 
-          this.enemyManager.damageEnemy(enemy, finalDmg, { color: p.color });
+          this.enemyManager.damageEnemy(enemy, finalDmg, {
+            color: p.color, attackCategory: p.attackCategory, playerPos: this.root.position
+          });
           state.exsGauge = Math.min(EXS_GAUGE_MAX, state.exsGauge + 6);
           if (!p.pierce) { hitTarget = true; break; }
         }
@@ -852,6 +1116,15 @@ export class Player {
     const mHp = maxHp();
     if (this.hp > mHp) this.hp = mHp;
 
+    // インフェルノ・サイズ装備中、HP50%以下でExSゲージ自動増加
+    if (state.weapon?.type === 'inferno_scythe' && this.hp <= mHp * 0.5) {
+      this.exsRegenAcc += dt;
+      if (this.exsRegenAcc >= 0.5) {
+        this.exsRegenAcc -= 0.5;
+        state.exsGauge = Math.min(EXS_GAUGE_MAX, state.exsGauge + 4);
+      }
+    }
+
     // 遺物リジェネ回復
     const regen = artifactStat('regen') + (hasSynergy('immortal_king') ? Math.ceil(mHp * 0.01) : 0);
     if (regen > 0 && this.hp < mHp) {
@@ -863,7 +1136,7 @@ export class Player {
       }
     }
 
-    // アストラル・オーブの浮遊ビット追従＆自動レーザー射撃
+    // アストラル・ビット公転＆0.8秒毎45%レーザー発射
     if (this.astralBits.length > 0) {
       if (now > this.bitActiveUntil) {
         this.clearAstralBits();
@@ -880,13 +1153,68 @@ export class Player {
         });
 
         this.bitFireTimer += dt;
-        if (this.bitFireTimer >= 0.65 && this.enemyManager.enemies.length > 0) {
+        if (this.bitFireTimer >= 0.8 && this.enemyManager.enemies.length > 0) {
           this.bitFireTimer = 0;
           const dmg = Math.round(atkTotal(this.hp) * 0.45);
-          this.fireProjectile(0, dmg, 0x10b981, { homing: true, starPerHit: 4 });
+          this.fireProjectile(0, dmg, 0x10b981, { homing: true, isBitLaser: true, attackCategory: 'skill' });
         }
       }
     }
+
+    // クロノ・オーラ（時空結界）更新
+    if (this.chronoAuraMesh) {
+      if (now > this.chronoAuraUntil) {
+        this.scene.remove(this.chronoAuraMesh);
+        this.chronoAuraMesh = null;
+      } else {
+        this.chronoAuraMesh.position.set(this.root.position.x, this.root.position.y + 0.08, this.root.position.z);
+        this.chronoAuraMesh.rotation.z += dt * 1.5;
+        this.chronoTickTimer += dt;
+        if (this.chronoTickTimer >= 0.5) {
+          this.chronoTickTimer = 0;
+          const dmg = Math.round(atkTotal(this.hp) * 0.5);
+          for (const e of [...this.enemyManager.enemies]) {
+            if (e.root.position.distanceTo(this.root.position) <= 6.8) {
+              e.slowUntil = now + 700;
+              this.enemyManager.damageEnemy(e, dmg, { color: 0x3b82f6, attackCategory: 'skill' });
+            }
+          }
+        }
+      }
+    }
+
+    // ブラックホール（アポカリプスQ）吸引＆8連撃
+    this.blackHoles = this.blackHoles.filter((bh) => {
+      bh.mesh.rotation.y += dt * 6;
+      bh.mesh.rotation.x += dt * 4;
+      bh.tickTimer += dt;
+
+      // 周囲の敵をブラックホール中心へ引き寄せる
+      for (const e of this.enemyManager.enemies) {
+        if (!e.isBoss && e.root.position.distanceTo(bh.pos) <= 9.5) {
+          const pull = bh.pos.clone().sub(e.root.position).setY(0).normalize().multiplyScalar(0.12);
+          e.root.position.add(pull);
+        }
+      }
+
+      if (bh.tickTimer >= 0.25) {
+        bh.tickTimer = 0;
+        bh.ticksLeft--;
+        for (const e of [...this.enemyManager.enemies]) {
+          if (e.root.position.distanceTo(bh.pos) <= 7.0) {
+            this.enemyManager.damageEnemy(e, bh.dmgPerTick, {
+              color: 0xb15cff, isCrit: bh.ticksLeft === 0, attackCategory: 'skill'
+            });
+          }
+        }
+      }
+
+      if (bh.ticksLeft <= 0) {
+        this.scene.remove(bh.mesh);
+        return false;
+      }
+      return true;
+    });
 
     // 落下メテオ更新
     this.skillObjects = this.skillObjects.filter((obj) => {
@@ -899,7 +1227,13 @@ export class Player {
           this.spawnSlashArc(4.2, obj.color, 1.5);
           for (const e of [...this.enemyManager.enemies]) {
             if (e.root.position.distanceTo(obj.target) <= 4.2) {
-              this.enemyManager.damageEnemy(e, obj.dmg, { color: obj.color, isCrit: true });
+              this.enemyManager.damageEnemy(e, obj.dmg, {
+                color: obj.color, isCrit: true, stunMs: obj.stunMs, attackCategory: 'skill'
+              });
+              if (obj.apoGainPerHit > 0) {
+                const add = Math.round(obj.apoGainPerHit * (hasSynergy('awake_apo') ? 1.5 : 1.0));
+                this.apoGauge = Math.min(100, this.apoGauge + add);
+              }
             }
           }
           for (const box of [...this.world.destructibles]) {
