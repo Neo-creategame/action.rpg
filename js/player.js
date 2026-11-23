@@ -219,6 +219,9 @@ export class Player {
     let dmg = takeDamage(rawAtk);
     const cut = artifactStat('dmgCut') + (hasSynergy('immortal_king') ? 10 : 0) + (hasSynergy('absolute_aegis') ? 15 : 0);
     if (cut > 0) dmg = Math.max(1, Math.round(dmg * (1 - Math.min(0.8, cut / 100))));
+    if (state.weapon?.type === 'inferno_scythe' && this.enemyManager.activeBoss?.hellfireGauge >= 50) {
+      dmg = Math.max(1, Math.round(dmg * 0.85));
+    }
 
     this.hp = Math.max(0, this.hp - dmg);
     this.invulnUntil = now + (hasSynergy('colossus_heart') ? 950 : 650);
@@ -624,6 +627,16 @@ export class Player {
     const exsDef = EXS_LIST[exsId] || EXS_LIST.giga_breaker;
     this.onToast(`💥 ${exsDef.name}！！`);
 
+    if (exsId === 'shadow_flash') {
+      this.executeGaleSlash8(dmg);
+    } else if (exsId === 'hell_legion') {
+      this.executePandemonium(dmg);
+    } else {
+      this.addCameraShake(0.4, 0.25);
+      this.spawnSlashArc(9.5, 0xffd36a, 2.8);
+      this.performMeleeHit(9.5, Math.round(dmg * 15.0), 0xffd36a, true, true, 3000, 0, 'skill');
+    }
+
     if (exsId === 'gale_slash') {
       this.executeGaleSlash8(dmg);
     } else if (exsId === 'pandemonium') {
@@ -888,7 +901,7 @@ export class Player {
           this.timeStopHits.set(enemy, this.timeStopHits.get(enemy) + 1);
         }
         const killed = this.enemyManager.damageEnemy(enemy, dmg, {
-          color, isCrit, stunMs, attackCategory, playerPos: this.root.position
+          color, isCrit, stunMs, attackCategory, playerPos: this.root.position, playerRef: this
         });
         hits++;
         if (killed) kills++;
@@ -999,7 +1012,7 @@ export class Player {
           }
 
           this.enemyManager.damageEnemy(enemy, finalDmg, {
-            color: p.color, attackCategory: p.attackCategory, playerPos: this.root.position
+            color: p.color, attackCategory: p.attackCategory, playerPos: this.root.position, playerRef: this
           });
           state.exsGauge = Math.min(EXS_GAUGE_MAX, state.exsGauge + 6);
           if (!p.pierce) { hitTarget = true; break; }
