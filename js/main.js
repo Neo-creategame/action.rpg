@@ -41,6 +41,10 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+window.addEventListener('warp-floor', (e) => {
+  const targetFloor = e.detail;
+  enterFloor(targetFloor, false);
+});
 
 const toastContainer = document.getElementById('toast-container');
 function showToast(msg) {
