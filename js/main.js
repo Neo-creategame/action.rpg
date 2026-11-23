@@ -46,8 +46,11 @@ window.addEventListener('resize', () => {
 });
 
 window.addEventListener('warp-floor', (e) => {
-  const targetFloor = e.detail;
-  enterFloor(targetFloor, false);
+  if (typeof e.detail === 'object' && e.detail !== null) {
+    enterFloor(e.detail.floor, !!e.detail.isBoss);
+  } else {
+    enterFloor(e.detail, false);
+  }
 });
 
 const toastContainer = document.getElementById('toast-container');
