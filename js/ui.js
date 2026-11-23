@@ -889,12 +889,12 @@ export class UIManager {
       btn.addEventListener('click', () => {
         const act = btn.dataset.pause;
         if (act === 'resume') {
-          this.closeAll();
+          this.closeModal();
         } else if (act === 'latest') {
-          this.closeAll();
+          this.closeModal();
           window.dispatchEvent(new CustomEvent('warp-floor', { detail: { floor: nextChallengeFloor, isBoss: false } }));
         } else if (act === 'town') {
-          this.closeAll();
+          this.closeModal();
           window.dispatchEvent(new CustomEvent('warp-floor', { detail: { floor: 0, isBoss: false } }));
         } else if (act === 'floors') {
           this.floorPage = 0;
@@ -924,7 +924,7 @@ export class UIManager {
       btn.addEventListener('click', () => {
         const f = Number(btn.dataset.warp);
         const isBoss = btn.dataset.boss === '1';
-        this.closeAll();
+        this.closeModal();
         window.dispatchEvent(new CustomEvent('warp-floor', { detail: { floor: f, isBoss } }));
       });
     });
