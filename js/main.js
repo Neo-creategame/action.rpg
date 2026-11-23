@@ -3,8 +3,8 @@ import { World } from './world.js';
 import { EnemyManager } from './enemy.js';
 import { Player } from './player.js';
 import { UIManager } from './ui.js';
-import { expNeed, EXS_GAUGE_MAX } from './data.js';
-import { state, SAVE, PLAYER, EQUIPPED, maxHp, atkTotal, plus, saveGame } from './save.js';
+import { expNeed, EXS_GAUGE_MAX, DEATH } from './data.js';
+import { state, SAVE, PLAYER, EQUIPPED, BACKPACK, STORAGE, maxHp, atkTotal, plus, saveGame } from './save.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b0d12);
@@ -96,7 +96,16 @@ const player = new Player(scene, camera, world, enemyManager, {
     }
   },
   onDeath: () => {
-    showToast('💀 力尽きた… 1Fへ帰還');
+    PLAYER.pts = 0;
+    const allItems = [state.weapon, ...Object.values(EQUIPPED), ...BACKPACK, ...STORAGE];
+    for (const it of allItems) {
+      if (it && !it.isLegend && it.dur > 0) {
+        const loss = Math.floor(it.dur * (1 - DEATH.durKeep));
+        if (loss > 0) wear(it, loss);
+      }
+    }
+    saveGame();
+    showToast('💀 力尽きた… 未振分Pt没収＆装備耐久半減で町へ帰還');
     enterFloor(0, false);
   },
   onSlowMo: (sec) => { slowMoUntil = performance.now() + sec * 1000; },
