@@ -623,7 +623,8 @@ export class EnemyManager {
       }*/
     } else if (Math.random() < DROP_RATE) {
       const arm = rollArmor(randomSlot(), enemy.floor);  
-      if (addToPack(arm)) this.onToast(`🛡️ ドロップ【${arm.label}】！`);
+      if (addToPack(arm)) { 
+        this.onToast(`🛡️ ドロップ【${arm.label}】！`);
       } else {
         this.onToast('バッグがいっぱいで拾えなかった…');
       }
