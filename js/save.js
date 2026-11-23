@@ -11,7 +11,7 @@ export const PACK_ROWS = 4;
 export const STORAGE_MAX = 40;
 
 export const SAVE = { cleared: 0, autoSell: false, autoDismantle: false };
-export const PLAYER = { lv: 1, exp: 0, pts: 0, hpPts: 0, atkPts: 0, gold: GOLD.start, currentHp: null };
+export const PLAYER = { lv: 1, exp: 0, pts: 0, hpPts: 0, atkPts: 0, bonusHp: 0, bonusAtk: 0, gold: GOLD.start, currentHp: null };
 export const POTIONS = { small: 0, full: 0 };
 
 export const EQUIPPED = {
@@ -213,7 +213,7 @@ export function armorStats() {
 }
 
 export function maxHp() {
-  const base = PLAYER_HP + PLAYER.hpPts * HP_PER_PT + armorStats().hp + artifactStat('hpFlat');
+  const base = PLAYER_HP + PLAYER.hpPts * HP_PER_PT + (PLAYER.bonusHp || 0) + armorStats().hp + artifactStat('hpFlat');
   const bonusPct = artifactStat('hpPct') + (hasSynergy('colossus_heart') ? 25 : 0);
   let mult = 1 + bonusPct / 100;
   if (artifactStat('glassCannon') > 0) mult *= 0.5;
@@ -222,7 +222,7 @@ export function maxHp() {
 
 export function atkTotal(curHp = null) {
   const w = state.weapon;
-  const base = Math.round((w.atk + PLAYER.atkPts * ATK_PER_PT) * (w.dur > 0 ? 1 : DURABILITY.brokenAtkMult));
+  const base = Math.round((w.atk + PLAYER.atkPts * ATK_PER_PT + (PLAYER.bonusAtk || 0)) * (w.dur > 0 ? 1 : DURABILITY.brokenAtkMult));
   let mult = 1 + artifactStat('atkPct') / 100;
   if (artifactStat('glassCannon') > 0) mult += artifactStat('glassCannon') / 100;
 
@@ -245,6 +245,18 @@ export const armorLabel = (it) => `${it.label}${plus(it)}(HP+${it.hp} 軽減${(i
 
 // ---- バッグ・装備操作 ----
 export function addToPack(it) {
+  if (SAVE.autoSell && it && !it.isLegend && !it.isBossItem && it.type !== 'spellbook') {
+    if (it.slot === 'weapon') {
+      const gain = Math.max(10, Math.round(it.atk * SHOP.sellPerAtk));
+      PLAYER.gold += gain;
+      return true;
+    }
+    if (SLOT_KEYS.includes(it.slot)) {
+      const gain = Math.max(10, Math.round(((it.hp || 10) + (it.red || 0.01) * 500) * SHOP.sellPerArmor));
+      PLAYER.gold += gain;
+      return true;
+    }
+  }
   if (PLAYER.lv >= 200 && SAVE.autoDismantle && it && SLOT_KEYS.includes(it.slot)) {
     const eq = EQUIPPED[it.slot];
     const score = (a) => (a ? (a.hp || 0) + (a.red || 0) * 500 : 0);
@@ -294,6 +306,7 @@ export const spendGold = (n) => {
 export function saveGame() {
   try {
     const data = {
+      spellbookDropped: !!SAVE.spellbookDropped,
       cleared: SAVE.cleared,
       autoSell: SAVE.autoSell,
       autoDismantle: SAVE.autoDismantle,
@@ -327,8 +340,10 @@ export function loadGame() {
     SAVE.cleared = data.cleared || 0;
     SAVE.autoSell = !!data.autoSell;
     SAVE.autoDismantle = !!data.autoDismantle;
+    SAVE.spellbookDropped = !!data.spellbookDropped;
     Object.assign(PLAYER, data.player);
     Object.assign(POTIONS, data.potions);
+    
     if (data.weapon) state.weapon = data.weapon;
 
     if (Array.isArray(data.artifacts)) {
