@@ -139,7 +139,15 @@ export class UIManager {
       this.modalTitle.textContent = '🎒 バッグ・装備・ステータス [I]';
       this.renderBagScreen();
     } else if (this.activeModal === 'town') {
-      this.modalTitle.textContent = '🏰 始まりの町（拠点メニュー） [T]';
+      const titles = {
+        inn: '🏨 冒険者の宿屋',
+        shop: '🛒 道具・装備ショップ',
+        smith: '🔨 鍛冶屋',
+        storage: '📦 倉庫',
+        gacha: '🎰 異界の召喚ガチャ',
+        exs: '⚡ ExS（終結スキル）変更'
+      };
+      this.modalTitle.textContent = titles[this.townTab] || '🏰 始まりの町';
       this.renderTownScreen();
     }
   }
@@ -366,6 +374,24 @@ export class UIManager {
   // 2. 町（拠点）メニュー画面
   // ==========================================
   renderTownScreen() {
+    let contentHtml = '';
+    if (this.townTab === 'inn') contentHtml = this.renderInnTab();
+    else if (this.townTab === 'shop') contentHtml = this.renderShopTab();
+    else if (this.townTab === 'smith') contentHtml = this.renderSmithTab();
+    else if (this.townTab === 'storage') contentHtml = this.renderStorageTab();
+    else if (this.townTab === 'gacha') contentHtml = this.renderGachaTab();
+    else if (this.townTab === 'exs') contentHtml = this.renderExsTab();
+
+    this.modalBody.innerHTML = `
+      <div class="town-header" style="justify-content: flex-end;">
+        <div class="gold-disp">所持金: <b class="gold">${PLAYER.gold.toLocaleString()}G</b></div>
+      </div>
+      <div class="town-content">${contentHtml}</div>
+    `;
+
+    this.bindTownEvents();
+  }
+  /*renderTownScreen() {
     const tabs = [
       { id: 'inn',     label: '🏨 宿屋' },
       { id: 'shop',    label: '🛒 ショップ' },
@@ -401,7 +427,7 @@ export class UIManager {
     });
 
     this.bindTownEvents();
-  }
+  }*/
 
   renderInnTab() {
     return `
