@@ -4,7 +4,7 @@ import { EnemyManager } from './enemy.js';
 import { Player } from './player.js';
 import { UIManager } from './ui.js';
 import { expNeed, EXS_GAUGE_MAX, DEATH } from './data.js';
-import { state, SAVE, PLAYER, EQUIPPED, BACKPACK, STORAGE, maxHp, atkTotal, plus, saveGame } from './save.js';
+import { state, SAVE, PLAYER, EQUIPPED, BACKPACK, SPELLBOOK_SLOTS, STORAGE, maxHp, atkTotal, plus, saveGame } from './save.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b0d12);
@@ -186,11 +186,36 @@ function updateHud(now) {
   enemyCountSpan.textContent = enemyManager.enemies.length;
 
   const boss = enemyManager.activeBoss;
+  const extraHud = document.getElementById('boss-extra-hud');
+  const weakBadge = document.getElementById('boss-weak-badge');
+  const subWrap = document.getElementById('boss-sub-bar-wrap');
+  const subBar = document.getElementById('boss-sub-bar');
+  const subText = document.getElementById('boss-sub-text');
+  
   if (boss && boss.hp > 0) {
     bossHud.classList.remove('hidden');
     bossNameSpan.textContent = boss.name;
     bossHpBar.style.width = `${(boss.hp / boss.maxHp) * 100}%`;
     bossHpText.textContent = `${boss.hp.toLocaleString()} / ${boss.maxHp.toLocaleString()}`;
+    const showAdaptive = boss.hasAdaptiveArmor;
+    const showHellfire = (w.type === 'inferno_scythe' || boss.hellfireGauge > 0);
+    if (showAdaptive || showHellfire) {
+      extraHud.classList.remove('hidden');
+      if (showAdaptive) {
+        weakBadge.classList.remove('hidden');
+        const wLabel = { melee: '⚔️ 弱点: 近接', ranged: '🏹 弱点: 遠距離', skill: '✨ 弱点: スキル' }[boss.weakness];
+        weakBadge.textContent = boss.isAdaptiveBroken ? '💥 ARMOR BREAK!' : wLabel;
+        subWrap.classList.remove('hidden');
+        subBar.style.width = `${boss.breakGauge}%`;
+        subBar.style.background = 'linear-gradient(90deg, #dd6b20, #ffd36a)';
+        subText.textContent = `ブレイク ${Math.floor(boss.breakGauge)}%`;
+      } else {
+        weakBadge.classList.add('hidden');
+        subWrap.classList.remove('hidden');
+        subBar.style.width = `${boss.hellfireGauge}%`;
+        subBar.style.background = 'linear-gradient(90deg, #c53030, #ff5500)';
+        subText.textContent = `業火 ${Math.floor(boss.hellfireGauge)}%`;
+      }
   } else {
     bossHud.classList.add('hidden');
   }
@@ -254,6 +279,25 @@ function updateHud(now) {
   cdDodge.style.color = dodgeLeft > 0 ? '#ffd36a' : '#48bb78';
 
   nameSkill.textContent = w.skill ? w.skill.name : 'スキル';
+  const sbContainer = document.getElementById('spellbook-hud-slots');
+  if (w.type === 'spellbook') {
+    sbContainer.classList.remove('hidden');
+    for (let i = 0; i < 3; i++) {
+      const sl = SPELLBOOK_SLOTS[i];
+      document.getElementById(`sb-name-${i}`).textContent = sl ? sl.skillName : '未登録';
+      const cdEl = document.getElementById(`sb-cd-${i}`);
+      if (!sl) {
+        cdEl.textContent = '-';
+        cdEl.style.color = '#718096';
+      } else {
+        const left = Math.max(0, player.nextSbTimes[i] - now);
+        cdEl.textContent = left > 0 ? `${(left / 1000).toFixed(1)}s` : 'READY';
+        cdEl.style.color = left > 0 ? '#ffd36a' : '#48bb78';
+      }
+    }
+  } else {
+    sbContainer.classList.add('hidden');
+  }
   const skillLeft = Math.max(0, player.nextSkillTime - now);
   cdSkill.textContent = skillLeft > 0 ? `${(skillLeft / 1000).toFixed(1)}s` : 'READY';
   cdSkill.style.color = skillLeft > 0 ? '#ffd36a' : '#48bb78';
