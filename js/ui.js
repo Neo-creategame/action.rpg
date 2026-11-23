@@ -6,7 +6,8 @@ import {
   state, SAVE, PLAYER, POTIONS, EQUIPPED, ARTIFACTS, BACKPACK, STORAGE,
   unlockedArtifactSlots, equippedArtifacts, activeSynergies, maxHp, atkTotal,
   armorStats, plus, armorLabel, addToPack, spendGold, saveGame,
-  rollWeapon, rollArmor, randomSlot, rollArtifact, rollLegendArtifact, createPotion
+  rollWeapon, rollArmor, randomSlot, rollArtifact, rollLegendArtifact, createPotion,
+  SPELLBOOK_SLOTS,
 } from './save.js';
 
 export class UIManager {
@@ -151,7 +152,8 @@ export class UIManager {
         smith: '🔨 鍛冶屋',
         storage: '📦 倉庫',
         gacha: '🎰 異界の召喚ガチャ',
-        exs: '⚡ ExS（終結スキル）変更'
+        exs: '⚡ ExS（終結スキル）変更',
+        magic: '📖 魔導台（スペルブック編集）',
       };
       this.modalTitle.textContent = titles[this.townTab] || '🏰 始まりの町';
       this.renderTownScreen();
@@ -387,6 +389,7 @@ export class UIManager {
     else if (this.townTab === 'storage') contentHtml = this.renderStorageTab();
     else if (this.townTab === 'gacha') contentHtml = this.renderGachaTab();
     else if (this.townTab === 'exs') contentHtml = this.renderExsTab();
+    else if (this.townTab === 'magic') contentHtml = this.renderMagicTab();
 
     this.modalBody.innerHTML = `
       <div class="town-header" style="justify-content: flex-end;">
@@ -525,6 +528,52 @@ export class UIManager {
     `;
   }
 
+  renderMagicTab() {
+    // 手持ちの全武器からセット可能なスキル候補を収集（スペルブック自身とLegend武器は除外）
+    const pool = [state.weapon, EQUIPPED.sub_weapon, ...BACKPACK, ...STORAGE]
+      .filter((it) => it && it.slot === 'weapon' && it.type !== 'spellbook' && !it.isLegend && it.skill);
+
+    // 武器タイプごとに重複除去
+    const uniqueWeapons = [];
+    const seen = new Set();
+    for (const w of pool) {
+      if (!seen.has(w.type)) {
+        seen.add(w.type);
+        uniqueWeapons.push(w);
+      }
+    }
+
+    return `
+      <div class="ui-card">
+        <h3>📖 魔導台（スペルブックに武器スキルを最大3つ登録）</h3>
+        <p class="muted" style="margin-bottom:10px;">スペルブック装備中、[1][2][3]キーで登録したスキルを発動できます（威力50%・CD2倍）。</p>
+        <div class="shop-list" style="margin-bottom:14px;">
+          ${[0, 1, 2].map((idx) => {
+            const sl = SPELLBOOK_SLOTS[idx];
+            return `
+              <div class="shop-row">
+                <span>スロット [${idx + 1}]: <b>${sl ? `${sl.skillName} (${sl.weaponName})` : '未登録'}</b></span>
+                ${sl ? `<button class="mini-btn danger" data-town="sb-clear" data-idx="${idx}">解除</button>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <h3>⚔️ 所持武器からスキルを抽出してセット</h3>
+        <div class="shop-list">
+          ${uniqueWeapons.length === 0 ? '<div class="muted">抽出できる武器を所持していません</div>' : uniqueWeapons.map((w) => `
+            <div class="shop-row">
+              <span><b>${w.skill.name}</b> <small>(${w.name} / CD:${(w.skill.cd * 2 / 1000).toFixed(1)}s)</small></span>
+              <div style="display:flex; gap:4px;">
+                ${[0, 1, 2].map((idx) => `<button class="mini-btn primary" data-town="sb-set" data-idx="${idx}" data-wtype="${w.type}">枠${idx + 1}へ</button>`).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   bindTownEvents() {
     this.modalBody.querySelectorAll('[data-town]').forEach((el) => {
       el.addEventListener('click', () => {
@@ -593,6 +642,24 @@ export class UIManager {
         } else if (act === 'equip-exs') {
           state.equippedExsId = el.dataset.id;
           this.onToast(`⚡ ExS【${EXS_LIST[state.equippedExsId].name}】を装備！`);
+        } else if (act === 'sb-set') {
+          const idx = Number(el.dataset.idx);
+          const wType = el.dataset.wtype;
+          const allWeps = [state.weapon, EQUIPPED.sub_weapon, ...BACKPACK, ...STORAGE];
+          const src = allWeps.find((it) => it && it.type === wType);
+          if (src && src.skill) {
+            SPELLBOOK_SLOTS[idx] = {
+              weaponType: src.type,
+              weaponName: src.name,
+              skillName: src.skill.name,
+              cd: src.skill.cd * 2
+            };
+            this.onToast(`📖 スロット${idx + 1}に【${src.skill.name}】を登録！`);
+          }
+        } else if (act === 'sb-clear') {
+          const idx = Number(el.dataset.idx);
+          SPELLBOOK_SLOTS[idx] = null;
+          this.onToast(`📖 スロット${idx + 1}を解除しました`);
         }
 
         saveGame();
