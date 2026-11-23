@@ -743,6 +743,7 @@ export class UIManager {
           } else {
             this.onToast('バッグがいっぱいです');
           }
+        }
 
         saveGame();
         this.render();
