@@ -77,10 +77,10 @@ function getBossDefinition(floor) {
   };
 }
 const RARE_MONSTERS = [
-  { name: '⚠️【暴虐の巨人】タイタン',     color: 0xff8c00, scale: 1.65, hpMult: 3.2, atkMult: 1.6, speed: 0.065, range: 3.0, ranged: false, buffType: 'hp' },
-  { name: '⚠️【疾風の暗殺者】シャドウ',   color: 0x00ffff, scale: 1.15, hpMult: 2.2, atkMult: 1.8, speed: 0.145, range: 2.4, ranged: false, buffType: 'atk' },
+  { name: '⚠️【暴虐の巨人】タイタン',     color: 0xff8c00, scale: 2.75, hpMult: 3.2, atkMult: 1.6, speed: 0.065, range: 3.0, ranged: false, buffType: 'hp' },
+  { name: '⚠️【疾風の暗殺者】シャドウ',   color: 0x00ffff, scale: 2.00, hpMult: 2.2, atkMult: 3.0, speed: 0.145, range: 2.4, ranged: false, buffType: 'atk' },
   { name: '⚠️【深淵の魔導士】ウォーロック', color: 0xb15cff, scale: 1.30, hpMult: 2.5, atkMult: 1.7, speed: 0.080, range: 3.2, ranged: true,  buffType: 'atk' },
-  { name: '⚠️【黄金の守護者】ガーディアン', color: 0xffd36a, scale: 1.50, hpMult: 3.5, atkMult: 1.4, speed: 0.070, range: 2.8, ranged: false, buffType: 'hp' }
+  { name: '⚠️【黄金の守護者】ガーディアン', color: 0xffd36a, scale: 3.50, hpMult: 3.5, atkMult: 1.4, speed: 0.070, range: 2.8, ranged: false, buffType: 'hp' }
 ];
 
 export class EnemyManager {
@@ -288,6 +288,25 @@ export class EnemyManager {
       barrierMesh.position.y = 1.2 * s;
       barrierMesh.visible = false;
       root.add(barrierMesh);
+    } else if (cfg.isRare) {
+      // ★異名持ちレアモンスター専用：頭上のツノ＋足元の回転オーラリング
+      const hornGeo = new THREE.ConeGeometry(0.18 * s, 0.75 * s, 6);
+      const hornL = new THREE.Mesh(hornGeo, new THREE.MeshBasicMaterial({ color: 0xffd36a }));
+      hornL.position.set(-0.3 * s, 2.15 * s, 0);
+      hornL.rotation.z = 0.25;
+      const hornR = new THREE.Mesh(hornGeo, new THREE.MeshBasicMaterial({ color: 0xffd36a }));
+      hornR.position.set(0.3 * s, 2.15 * s, 0);
+      hornR.rotation.z = -0.25;
+      root.add(hornL, hornR);
+
+      const rareAura = new THREE.Mesh(
+        new THREE.RingGeometry(1.1 * s, 1.45 * s, 24),
+        new THREE.MeshBasicMaterial({ color: 0xffd36a, side: THREE.DoubleSide, transparent: true, opacity: 0.75 })
+      );
+      rareAura.rotation.x = -Math.PI / 2;
+      rareAura.position.y = 0.08;
+      root.add(rareAura);
+      cfg._rareAura = rareAura;
     }
 
     const warnGeo = new THREE.RingGeometry(0.2, cfg.atkRange, 28);
@@ -925,6 +944,9 @@ export class EnemyManager {
     for (const enemy of [...this.enemies]) {
       enemy.hpBg.lookAt(this.camera.position);
       enemy.hpFill.lookAt(this.camera.position);
+      if (enemy._rareAura) {
+        enemy._rareAura.rotation.z += dt * 2.2;
+      }
 
       if (enemy.bossType === 'ninja') {
         enemy.mat.opacity = now < enemy.stealthUntil ? 0.12 : 1.0;
