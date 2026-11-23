@@ -10,7 +10,7 @@ export const PACK_COLS = 5;
 export const PACK_ROWS = 4;
 export const STORAGE_MAX = 40;
 
-export const SAVE = { cleared: 0, autoSell: false };
+export const SAVE = { cleared: 0, autoSell: false, autoDismantle: false };
 export const PLAYER = { lv: 1, exp: 0, pts: 0, hpPts: 0, atkPts: 0, gold: GOLD.start, currentHp: null };
 export const POTIONS = { small: 0, full: 0 };
 
@@ -245,6 +245,16 @@ export const armorLabel = (it) => `${it.label}${plus(it)}(HP+${it.hp} 軽減${(i
 
 // ---- バッグ・装備操作 ----
 export function addToPack(it) {
+  if (PLAYER.lv >= 200 && SAVE.autoDismantle && it && SLOT_KEYS.includes(it.slot)) {
+    const eq = EQUIPPED[it.slot];
+    const score = (a) => (a ? (a.hp || 0) + (a.red || 0) * 500 : 0);
+    // 同じ部位を装備中で、拾った防具の性能が装備中以下なら自動分解してゴールド化
+    if (eq && score(it) <= score(eq)) {
+      const goldGain = Math.max(15, Math.round(score(it) * SHOP.sellPerArmor));
+      PLAYER.gold += goldGain;
+      return true; // バッグには入れず取得完了扱い
+    }
+  }
   if (it.slot === 'potion') {
     for (let i = 0; i < BACKPACK.length; i++) {
       const slotItem = BACKPACK[i];
@@ -286,6 +296,7 @@ export function saveGame() {
     const data = {
       cleared: SAVE.cleared,
       autoSell: SAVE.autoSell,
+      autoDismantle: SAVE.autoDismantle,
       player: { ...PLAYER },
       potions: { ...POTIONS },
       weapon: state.weapon,
@@ -315,6 +326,7 @@ export function loadGame() {
 
     SAVE.cleared = data.cleared || 0;
     SAVE.autoSell = !!data.autoSell;
+    SAVE.autoDismantle = !!data.autoDismantle;
     Object.assign(PLAYER, data.player);
     Object.assign(POTIONS, data.potions);
     if (data.weapon) state.weapon = data.weapon;
