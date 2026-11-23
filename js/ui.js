@@ -559,20 +559,6 @@ export class UIManager {
               `;
             }).join('')}
           </div>
-
-          ${equipWeapons.length > 0 ? `
-            <h3 style="margin-top:14px;">⚔️ 装備中の武器からセット</h3>
-            <div class="shop-list">
-              ${equipWeapons.map((ew) => `
-                <div class="shop-row">
-                  <span><b>${ew.item.skill.name}</b> <small>(${ew.item.name})</small></span>
-                  <div style="display:flex; gap:4px;">
-                    ${[0, 1, 2].map((idx) => `<button class="mini-btn primary" data-town="sb-set-item" data-src="equip" data-wtype="${ew.item.type}" data-idx="${idx}">枠${idx + 1}</button>`).join('')}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          ` : ''}
         </div>
 
         <!-- 右カラム：バッグ一覧（ここから直接選択して登録） -->
@@ -698,11 +684,14 @@ export class UIManager {
           const idx = Number(el.dataset.idx);
           const src = BACKPACK[this.selectedPackIdx];
           if (src && src.skill) {
+            const prevSlot = SPELLBOOK_SLOTS[idx];
+            BACKPACK[this.selectedPackIdx] = prevSlot && prevSlot.weaponItem ? prevSlot.weaponItem : null;
             SPELLBOOK_SLOTS[idx] = {
               weaponType: src.type,
               weaponName: src.name,
               skillName: src.skill.name,
               cd: src.skill.cd * 2
+              weaponItem: src
             };
             this.onToast(`📖 スロット${idx + 1}に【${src.skill.name}】を登録！`);
           }
@@ -721,8 +710,16 @@ export class UIManager {
           }
         } else if (act === 'sb-clear') {
           const idx = Number(el.dataset.idx);
+          const sl = SPELLBOOK_SLOTS[idx];
+          if (!sl) return;
+
+          if (sl.weaponItem) {
+            if (!addToPack(sl.weaponItem)) {
+              return this.onToast('バッグがいっぱいで武器を戻せません！');
+            }
+          }
           SPELLBOOK_SLOTS[idx] = null;
-          this.onToast(`📖 スロット${idx + 1}を解除しました`);
+          this.onToast(`📖 スロット${idx + 1}を解除し、武器をバッグに戻しました`);
         }
 
         saveGame();
