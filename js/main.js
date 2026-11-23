@@ -68,7 +68,7 @@ function spawnDamagePopup(worldPos, dmg, isCrit = false) {
   setTimeout(() => el.remove(), 750);
 }
 
-let currentFloor = Math.max(1, (SAVE.cleared || 0) + 1);
+let currentFloor = 0;
 let isBossStage = false; // false = 通常階 (XF), true = ボス階 (X.5F)
 let slowMoUntil = 0;
 
@@ -79,7 +79,11 @@ let uiManager = null;
 const player = new Player(scene, camera, world, enemyManager, {
   onToast: showToast,
   onNextFloor: () => {
-    if (!isBossStage) {
+    if (currentFloor === 0) {
+    // 0F（町）のポータルからは 1F（または続きの階層）へ
+    const startDungeonFloor = Math.max(1, (SAVE.cleared || 0) + 1);
+    enterFloor(startDungeonFloor, false);
+    } else if (!isBossStage) {
       // 通常階 (XF) クリア → 毎階層必ずボス階 (X.5F) へ！
       enterFloor(currentFloor, true);
     } else {
@@ -89,7 +93,7 @@ const player = new Player(scene, camera, world, enemyManager, {
   },
   onDeath: () => {
     showToast('💀 力尽きた… 1Fへ帰還');
-    enterFloor(1, false);
+    enterFloor(0, false);
   },
   onSlowMo: (sec) => { slowMoUntil = performance.now() + sec * 1000; },
   isUiOpen: () => uiManager ? uiManager.isOpen() : false
@@ -106,7 +110,7 @@ function enterFloor(floor, bossFlag = false) {
   player.velocityY = 0;
 
   enemyManager.spawnForFloor(floor, layout.spawnPoints, layout.bossPoint, isBossStage, layout.bossRoomCorners);
-  showToast(isBossStage ? `⚠️ 第${floor}.5層 ボス階突入！` : `⚔️ 第${floor}層 到着`);
+  showToast(floor === 0 ? '🏰 0F 始まりの町' : isBossStage ? `⚠️ 第${floor}.5層 ボス階突入！` : `⚔️ 第${floor}層 到着`);
   saveGame();
 }
 
@@ -164,7 +168,7 @@ function updateHud(now) {
   const mHp = maxHp();
   if (player.hp > mHp) player.hp = mHp;
 
-  floorSpan.textContent = currentFloor;
+  floorSpan.textContent = currentFloor === 0 ? '0 (始まりの町)' : currentFloor;
   enemyCountSpan.textContent = enemyManager.enemies.length;
 
   const boss = enemyManager.activeBoss;
@@ -187,8 +191,10 @@ function updateHud(now) {
     interactPrompt.classList.remove('hidden');
     interactPrompt.textContent = nearbyItem.label;
   } else if (distPortal <= 2.8) {
-    interactPrompt.classList.remove('hidden');
-    interactPrompt.textContent = world.portalLocked ? '🔒 ボス討伐で解放' : '[F] 次の階層へ進む';
+  interactPrompt.classList.remove('hidden');
+  interactPrompt.textContent = currentFloor === 0
+    ? '[F] ダンジョンへ出発する'
+    : world.portalLocked ? '🔒 ボス討伐で解放' : '[F] 次の階層へ進む';
   } else {
     interactPrompt.classList.add('hidden');
   }
