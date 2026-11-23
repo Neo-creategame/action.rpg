@@ -82,6 +82,9 @@ export class World {
     floorMesh.receiveShadow = true;
     this.scene.add(floorMesh);
     this.dungeonMeshes.push(floorMesh);
+    if (floor === 0) {
+      return this.buildTown();
+    }
 
     if (isBossFloor) {
       return this.buildBossArena(floor);
@@ -486,6 +489,8 @@ export class World {
       player.hp = Math.min(maxHpVal, player.hp + heal);
       this.spawnHitSpark(item.pos.clone().add(new THREE.Vector3(0, 1.0, 0)), 0x00ffff);
       this.onToast(`💧 回復の泉！HP +${heal} 回復`);
+    }else if (item.type === 'town_facility') {
+      window.dispatchEvent(new CustomEvent('open-town-tab', { detail: item.tabId }));
     }
   }
 
@@ -516,6 +521,76 @@ export class World {
     this.portalMesh.material.color.setHex(0x00ffff);
     this.portalRing.material.color.setHex(0x63b3ed);
     this.onToast('✨ 封印解除！奥のポータル（Fキー）から次の階へ進めます！');
+  }
+  // ---- 0F：始まりの町マップ生成 ----
+  buildTown() {
+    const W = 20;
+    const H = 20;
+    const wallPositions = [];
+    const toWorldX = (gx) => (gx - 9.5) * TILE_SIZE;
+    const toWorldZ = (gy) => (gy - 9.5) * TILE_SIZE;
+
+    // 外周のみ壁で囲む広場
+    for (let gy = 0; gy < H; gy++) {
+      for (let gx = 0; gx < W; gx++) {
+        if (gx === 0 || gx === W - 1 || gy === 0 || gy === H - 1) {
+          wallPositions.push({ x: toWorldX(gx), z: toWorldZ(gy) });
+        }
+      }
+    }
+    this.buildInstancedDungeonWalls(wallPositions, 0x2b6cb0);
+
+    // 中央に無料回復の泉
+    this.spawnFountain(0, 0);
+
+    // 6つの町施設を配置（近づいて[F]で該当タブを開く）
+    this.spawnTownFacility(-14, -10, 'inn',     0x48bb78, '[F] 🏨 宿屋');
+    this.spawnTownFacility( 14, -10, 'shop',    0xffd36a, '[F] 🛒 ショップ');
+    this.spawnTownFacility(-14,   4, 'smith',   0xed8936, '[F] 🔨 鍛冶屋');
+    this.spawnTownFacility( 14,   4, 'storage', 0x63b3ed, '[F] 📦 倉庫');
+    this.spawnTownFacility(-14,  16, 'gacha',   0xd53f8c, '[F] 🎰 召喚ガチャ');
+    this.spawnTownFacility( 14,  16, 'exs',     0xb15cff, '[F] ⚡ ExS変更');
+
+    // 北奥にダンジョン（1F）への入口ポータル
+    this.createExitPortal(0, -28, false);
+
+    return {
+      playerStart: new THREE.Vector3(0, 0, 22),
+      spawnPoints: [],
+      bossPoint: null,
+      bossRoomCorners: null
+    };
+  }
+
+  spawnTownFacility(x, z, tabId, color, label) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    const pillar = new THREE.Mesh(
+      new THREE.BoxGeometry(2.2, 2.4, 2.2),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.4 })
+    );
+    pillar.position.y = 1.2;
+    pillar.castShadow = true;
+    group.add(pillar);
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(1.4, 1.8, 24),
+      new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.08;
+    group.add(ring);
+
+    this.scene.add(group);
+    this.dungeonMeshes.push(group);
+
+    this.interactables.push({
+      type: 'town_facility',
+      tabId,
+      label,
+      pos: new THREE.Vector3(x, 0, z)
+    });
   }
 
   addDestructibleBlock(x, y, z, color, hp) {
