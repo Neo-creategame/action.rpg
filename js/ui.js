@@ -7,7 +7,7 @@ import {
   unlockedArtifactSlots, equippedArtifacts, activeSynergies, maxHp, atkTotal,
   armorStats, plus, armorLabel, addToPack, spendGold, saveGame,
   rollWeapon, rollArmor, randomSlot, rollArtifact, rollLegendArtifact, createPotion,
-  SPELLBOOK_SLOTS,
+  SPELLBOOK_SLOTS, STORAGE_MAX,
 } from './save.js';
 
 export class UIManager {
@@ -473,14 +473,22 @@ export class UIManager {
   }
 
   renderStorageTab() {
+    const canExpand = STORAGE.length < STORAGE_MAX;
+    const expandCost = STORAGE.length === 20 ? 10000 : STORAGE.length === 30 ? 25000 : 50000;
+
     return `
       <div class="ui-card">
-        <h3>📦 倉庫（クリックでバッグへ取り出し）</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <h3>📦 倉庫 (${STORAGE.filter(Boolean).length} / ${STORAGE.length}枠)</h3>
+          ${canExpand ? `<button class="mini-btn primary" data-town="expand-storage" data-cost="${expandCost}">+10枠拡張 (${expandCost.toLocaleString()}G)</button>` : '<span class="muted">最大拡張済み</span>'}
+        </div>
+        <p class="muted" style="margin-bottom:8px;">クリックでバッグへ取り出し ／ 右クリックで直接売却</p>
         <div class="pack-grid">
           ${STORAGE.map((it, idx) => {
             if (!it) return `<div class="pack-cell empty">空き</div>`;
             const name = it.slot === 'weapon' ? `${it.name}${plus(it)}` : it.slot === 'artifact' ? it.name : it.slot === 'potion' ? `${it.name}×${it.stack}` : `${it.label}${plus(it)}`;
-            return `<div class="pack-cell" data-town="take-storage" data-idx="${idx}">${name}</div>`;
+            const sellVal = this.calcSellPrice(it);
+            return `<div class="pack-cell" data-town="take-storage" data-idx="${idx}" title="右クリックで売却 (+${sellVal}G)">${name}<br><small class="gold">${sellVal}G</small></div>`;
           }).join('')}
         </div>
       </div>
@@ -720,8 +728,37 @@ export class UIManager {
           }
           SPELLBOOK_SLOTS[idx] = null;
           this.onToast(`📖 スロット${idx + 1}を解除し、武器をバッグに戻しました`);
-        }
+        } else if (act === 'expand-storage') {
+          const cost = Number(el.dataset.cost);
+          if (STORAGE.length >= STORAGE_MAX) return;
+          if (!spendGold(cost)) return this.onToast('ゴールド不足です');
+          for (let i = 0; i < 10; i++) STORAGE.push(null);
+          this.onToast(`📦 倉庫が ${STORAGE.length}枠 に拡張されました！`);
+        } else if (act === 'take-storage') {
+          const idx = Number(el.dataset.idx);
+          const it = STORAGE[idx];
+          if (it && addToPack(it)) {
+            STORAGE[idx] = null;
+            this.onToast('バッグへ取り出しました');
+          } else {
+            this.onToast('バッグがいっぱいです');
+          }
 
+        saveGame();
+        this.render();
+      });
+    });
+    // 倉庫アイテムの右クリック直接売却
+    this.modalBody.querySelectorAll('[data-town="take-storage"]').forEach((el) => {
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const idx = Number(el.dataset.idx);
+        const it = STORAGE[idx];
+        if (!it || isRestrictedLegend(it)) return this.onToast('Legend武器は売却できません');
+        const gain = this.calcSellPrice(it);
+        PLAYER.gold += gain;
+        STORAGE[idx] = null;
+        this.onToast(`💰 倉庫から直接売却 +${gain}G`);
         saveGame();
         this.render();
       });
@@ -792,7 +829,7 @@ export class UIManager {
         ${floorGridHtml}
 
         <button class="pause-btn ${canDismantle ? '' : 'disabled'}" data-pause="auto-dismantle">
-          ♻️ 弱防具の自動分解: ${!canDismantle ? '🔒 Lv.200で解放' : SAVE.autoDismantle ? 'ON' : 'OFF'}
+          ♻️ 防具の自動分解: ${!canDismantle ? '🔒 Lv.200で解放' : SAVE.autoDismantle ? 'ON' : 'OFF'}
         </button>
 
         <button class="pause-btn" data-pause="save">手動セーブ</button>
