@@ -787,6 +787,7 @@ export class EnemyManager {
   }
 
   update(dt, player) {
+    this.playerRef = player;
     const now = performance.now();
     const pPos = player.root.position;
 
