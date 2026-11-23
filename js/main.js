@@ -129,8 +129,9 @@ renderer.domElement.addEventListener('mousedown', () => {
 });
 
 document.addEventListener('pointerlockchange', () => {
-  const locked = document.pointerLockElement === document.body;
-  overlay.classList.toggle('hidden', locked || uiManager.isOpen());
+  if (document.pointerLockElement === document.body) {
+    overlay.classList.add('hidden');
+  }
 });
 
 // HUD要素
