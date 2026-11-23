@@ -39,7 +39,10 @@ export class UIManager {
     document.getElementById('btn-open-town')?.addEventListener('click', () => this.toggleModal('town'));
 
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyI') {
+      if (e.code === 'Tab') {
+        e.preventDefault();
+        this.toggleModal('pause');
+      } else if (e.code === 'KeyI') {
         e.preventDefault();
         this.toggleModal('bag');
       } else if (e.code === 'Escape' && this.activeModal) {
@@ -135,7 +138,10 @@ export class UIManager {
   // ---- メイン描画ディスパッチ ----
   render() {
     if (!this.activeModal) return;
-    if (this.activeModal === 'bag') {
+    if (this.activeModal === 'pause') {
+      this.modalTitle.textContent = '⏸ ポーズメニュー [Tab]';
+      this.renderPauseScreen();
+    } else if (this.activeModal === 'bag') {
       this.modalTitle.textContent = '🎒 バッグ・装備・ステータス [I]';
       this.renderBagScreen();
     } else if (this.activeModal === 'town') {
@@ -624,6 +630,84 @@ export class UIManager {
       }
     }
     this.onToast(`🎰 召喚結果: ${results.join(' / ')}`);
+  }
+  // ==========================================
+  // ポーズメニュー画面 [Tab]
+  // ==========================================
+  renderPauseScreen(showFloorList = false) {
+    const cleared = SAVE.cleared || 0;
+    const nextChallenge = cleared + 1;
+    const canDismantle = PLAYER.lv >= 200;
+
+    // 攻略済み階層ボタン一覧（1F 〜 最新の挑戦階）
+    let floorGridHtml = '';
+    if (showFloorList) {
+      const floors = [];
+      for (let f = 1; f <= nextChallenge; f++) {
+        floors.push(`<button class="mini-btn" data-warp="${f}">${f}F</button>`);
+      }
+      floorGridHtml = `
+        <div class="pause-floor-list">
+          ${floors.join('')}
+        </div>
+      `;
+    }
+
+    this.modalBody.innerHTML = `
+      <div class="pause-menu-box">
+        <div class="pause-banner">
+          ポーズ中 攻略済み最高: ${cleared > 0 ? `${cleared}.5F` : 'なし'}（Tabで再開）
+        </div>
+
+        <button class="pause-btn" data-pause="latest">⚡ 最新の挑戦階へ (${nextChallenge}F)</button>
+        <button class="pause-btn" data-pause="town">町へ戻る</button>
+        <button class="pause-btn" data-pause="toggle-floors">攻略済みの階層一覧から選ぶ</button>
+        ${floorGridHtml}
+
+        <button class="pause-btn ${canDismantle ? '' : 'disabled'}" data-pause="auto-dismantle">
+          ♻️ 弱防具の自動分解: ${!canDismantle ? '🔒 Lv.200で解放' : SAVE.autoDismantle ? 'ON' : 'OFF'}
+        </button>
+
+        <button class="pause-btn" data-pause="save">手動セーブ</button>
+        <button class="pause-btn" data-pause="resume">ゲームに戻る</button>
+      </div>
+    `;
+
+    // イベント登録
+    this.modalBody.querySelectorAll('[data-pause]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const act = btn.dataset.pause;
+        if (act === 'latest') {
+          window.dispatchEvent(new CustomEvent('warp-floor', { detail: nextChallenge }));
+          this.closeModal();
+        } else if (act === 'town') {
+          window.dispatchEvent(new CustomEvent('warp-floor', { detail: 0 }));
+          this.closeModal();
+        } else if (act === 'toggle-floors') {
+          this.renderPauseScreen(!showFloorList);
+        } else if (act === 'auto-dismantle') {
+          if (!canDismantle) {
+            return this.onToast('Lv.200以上で解放されます');
+          }
+          SAVE.autoDismantle = !SAVE.autoDismantle;
+          saveGame();
+          this.renderPauseScreen(showFloorList);
+        } else if (act === 'save') {
+          saveGame();
+          this.onToast('💾 セーブしました！');
+        } else if (act === 'resume') {
+          this.closeModal();
+        }
+      });
+    });
+
+    this.modalBody.querySelectorAll('[data-warp]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const f = Number(btn.dataset.warp);
+        window.dispatchEvent(new CustomEvent('warp-floor', { detail: f }));
+        this.closeModal();
+      });
+    });
   }
 
   // ==========================================
