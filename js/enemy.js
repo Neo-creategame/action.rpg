@@ -293,6 +293,7 @@ export class EnemyManager {
       barrierMesh,
       warnRing,
       warnMat,
+      stunBox,
       hpBg,
       hpFill,
       hpBarWidth: 1.34 * s,
