@@ -82,12 +82,6 @@ export class UIManager {
     this.activeModal = null;
     this.modalOverlay.classList.add('hidden');
     saveGame();
-
-    // メニューを閉じたら「クリックして操作再開」のオーバーレイを再表示する
-    const lockOverlay = document.getElementById('lock-overlay');
-    if (lockOverlay) {
-      lockOverlay.classList.remove('hidden');
-    }
   }
 
   // ---- ポーション使用 ----
@@ -391,43 +385,6 @@ export class UIManager {
 
     this.bindTownEvents();
   }
-  /*renderTownScreen() {
-    const tabs = [
-      { id: 'inn',     label: '🏨 宿屋' },
-      { id: 'shop',    label: '🛒 ショップ' },
-      { id: 'smith',   label: '🔨 鍛冶屋' },
-      { id: 'storage', label: '📦 倉庫' },
-      { id: 'gacha',   label: '🎰 ガチャ' },
-      { id: 'exs',     label: '⚡ ExS変更' }
-    ];
-
-    let contentHtml = '';
-    if (this.townTab === 'inn') contentHtml = this.renderInnTab();
-    else if (this.townTab === 'shop') contentHtml = this.renderShopTab();
-    else if (this.townTab === 'smith') contentHtml = this.renderSmithTab();
-    else if (this.townTab === 'storage') contentHtml = this.renderStorageTab();
-    else if (this.townTab === 'gacha') contentHtml = this.renderGachaTab();
-    else if (this.townTab === 'exs') contentHtml = this.renderExsTab();
-
-    this.modalBody.innerHTML = `
-      <div class="town-header">
-        <div class="tab-bar">
-          ${tabs.map((t) => `<button class="tab-btn ${this.townTab === t.id ? 'active' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}
-        </div>
-        <div class="gold-disp">所持金: <b class="gold">${PLAYER.gold.toLocaleString()}G</b></div>
-      </div>
-      <div class="town-content">${contentHtml}</div>
-    `;
-
-    this.modalBody.querySelectorAll('[data-tab]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        this.townTab = btn.dataset.tab;
-        this.render();
-      });
-    });
-
-    this.bindTownEvents();
-  }*/
 
   renderInnTab() {
     return `
