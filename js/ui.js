@@ -54,6 +54,9 @@ export class UIManager {
       this.townTab = e.detail || 'inn';
       this.openModal('town');
   });
+  this.modalOverlay?.addEventListener('click', (e) => {
+    if (e.target === this.modalOverlay) this.closeModal();
+  });
   }
 
   isOpen() {
@@ -82,6 +85,9 @@ export class UIManager {
     this.activeModal = null;
     this.modalOverlay.classList.add('hidden');
     saveGame();
+    try {
+      document.body.requestPointerLock?.()?.catch?.(() => {});
+    } catch (e) {}
   }
 
   // ---- ポーション使用 ----
