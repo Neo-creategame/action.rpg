@@ -550,6 +550,7 @@ export class World {
     this.spawnTownFacility( 14,   4, 'storage', 0x63b3ed, '[F] 📦 倉庫');
     this.spawnTownFacility(-14,  16, 'gacha',   0xd53f8c, '[F] 🎰 召喚ガチャ');
     this.spawnTownFacility( 14,  16, 'exs',     0xb15cff, '[F] ⚡ ExS変更');
+    this.spawnTownFacility(  0,  16, 'magic',   0x9f7aea, '[F] 📖 魔導台(スペルブック)');
 
     // 北奥にダンジョン（1F）への入口ポータル
     this.createExitPortal(0, -28, false);
