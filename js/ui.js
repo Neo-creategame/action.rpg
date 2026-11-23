@@ -53,7 +53,7 @@ export class UIManager {
     window.addEventListener('open-town-tab', (e) => {
       this.townTab = e.detail || 'inn';
       this.openModal('town');
-  }
+  });
   }
 
   isOpen() {
