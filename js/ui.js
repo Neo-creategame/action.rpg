@@ -529,47 +529,97 @@ export class UIManager {
   }
 
   renderMagicTab() {
-    // 手持ちの全武器からセット可能なスキル候補を収集（スペルブック自身とLegend武器は除外）
-    const pool = [state.weapon, EQUIPPED.sub_weapon, ...BACKPACK, ...STORAGE]
-      .filter((it) => it && it.slot === 'weapon' && it.type !== 'spellbook' && !it.isLegend && it.skill);
+    // 装備中・バッグ内の武器をピックアップ（スペルブック自身とLegend武器は対象外）
+    const equipWeapons = [
+      { label: 'メイン装備', item: state.weapon },
+      { label: 'サブ装備',   item: EQUIPPED.sub_weapon }
+    ].filter((x) => x.item && x.item.slot === 'weapon' && x.item.type !== 'spellbook' && !x.item.isLegend && x.item.skill);
 
-    // 武器タイプごとに重複除去
-    const uniqueWeapons = [];
-    const seen = new Set();
-    for (const w of pool) {
-      if (!seen.has(w.type)) {
-        seen.add(w.type);
-        uniqueWeapons.push(w);
-      }
+    return `
+      <div class="ui-grid-2">
+        <!-- 左カラム：スペルブックの3スロット -->
+        <div class="ui-card">
+          <h3>📖 スペルブック登録スロット</h3>
+          <p class="muted" style="margin-bottom:10px;">
+            スペルブック装備中、[1][2][3]キーで発動します（威力50%・CD2倍）。
+          </p>
+          <div class="shop-list">
+            ${[0, 1, 2].map((idx) => {
+              const sl = SPELLBOOK_SLOTS[idx];
+              return `
+                <div class="shop-row">
+                  <div>
+                    <div><b>スロット [${idx + 1}]</b></div>
+                    <div style="font-size:12px; color:${sl ? '#00ffff' : '#718096'};">
+                      ${sl ? `${sl.skillName} (${sl.weaponName} / CD:${(sl.cd / 1000).toFixed(1)}s)` : '未登録'}
+                    </div>
+                  </div>
+                  ${sl ? `<button class="mini-btn danger" data-town="sb-clear" data-idx="${idx}">解除</button>` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          ${equipWeapons.length > 0 ? `
+            <h3 style="margin-top:14px;">⚔️ 装備中の武器からセット</h3>
+            <div class="shop-list">
+              ${equipWeapons.map((ew) => `
+                <div class="shop-row">
+                  <span><b>${ew.item.skill.name}</b> <small>(${ew.item.name})</small></span>
+                  <div style="display:flex; gap:4px;">
+                    ${[0, 1, 2].map((idx) => `<button class="mini-btn primary" data-town="sb-set-item" data-src="equip" data-wtype="${ew.item.type}" data-idx="${idx}">枠${idx + 1}</button>`).join('')}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- 右カラム：バッグ一覧（ここから直接選択して登録） -->
+        <div class="ui-card">
+          <h3>🎒 バッグ (${BACKPACK.filter(Boolean).length} / ${BACKPACK.length})</h3>
+          <div class="pack-grid">
+            ${BACKPACK.map((it, pIdx) => {
+              if (!it) return `<div class="pack-cell empty">空き</div>`;
+              const isValidWep = (it.slot === 'weapon' && it.type !== 'spellbook' && !it.isLegend && it.skill);
+              const sel = this.selectedPackIdx === pIdx ? 'selected' : '';
+              const rarityCls = it.isLegend || it.rarity === 'Legend' ? 'legend' : it.isBossItem ? 'boss' : '';
+              const label = it.slot === 'weapon' ? `${it.name}${plus(it)}<br><small>${it.skill?.name || ''}</small>`
+                          : it.slot === 'potion' ? `${it.name}<br><small>×${it.stack}</small>`
+                          : it.slot === 'artifact' ? `${it.name}<br><small>${it.typeName}</small>`
+                          : `${it.label}${plus(it)}<br><small>HP+${it.hp}</small>`;
+              return `<div class="pack-cell ${sel} ${rarityCls}" style="${isValidWep ? '' : 'opacity:0.45;'}" data-town="sb-select-pack" data-pack="${pIdx}">${label}</div>`;
+            }).join('')}
+          </div>
+
+          <div class="detail-panel">
+            ${this.renderMagicBagDetail()}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  renderMagicBagDetail() {
+    const it = BACKPACK[this.selectedPackIdx];
+    if (!it) {
+      return `<div class="muted">右のバッグからスキルを登録したい武器をクリックしてください</div>`;
+    }
+    if (it.slot !== 'weapon' || !it.skill) {
+      return `<div class="muted">「${it.name || it.label}」は武器ではないためスキルを抽出できません</div>`;
+    }
+    if (it.type === 'spellbook' || it.isLegend) {
+      return `<div class="muted">「${it.name}」のスキルはスペルブックに登録できません</div>`;
     }
 
     return `
-      <div class="ui-card">
-        <h3>📖 魔導台（スペルブックに武器スキルを最大3つ登録）</h3>
-        <p class="muted" style="margin-bottom:10px;">スペルブック装備中、[1][2][3]キーで登録したスキルを発動できます（威力50%・CD2倍）。</p>
-        <div class="shop-list" style="margin-bottom:14px;">
-          ${[0, 1, 2].map((idx) => {
-            const sl = SPELLBOOK_SLOTS[idx];
-            return `
-              <div class="shop-row">
-                <span>スロット [${idx + 1}]: <b>${sl ? `${sl.skillName} (${sl.weaponName})` : '未登録'}</b></span>
-                ${sl ? `<button class="mini-btn danger" data-town="sb-clear" data-idx="${idx}">解除</button>` : ''}
-              </div>
-            `;
-          }).join('')}
-        </div>
-
-        <h3>⚔️ 所持武器からスキルを抽出してセット</h3>
-        <div class="shop-list">
-          ${uniqueWeapons.length === 0 ? '<div class="muted">抽出できる武器を所持していません</div>' : uniqueWeapons.map((w) => `
-            <div class="shop-row">
-              <span><b>${w.skill.name}</b> <small>(${w.name} / CD:${(w.skill.cd * 2 / 1000).toFixed(1)}s)</small></span>
-              <div style="display:flex; gap:4px;">
-                ${[0, 1, 2].map((idx) => `<button class="mini-btn primary" data-town="sb-set" data-idx="${idx}" data-wtype="${w.type}">枠${idx + 1}へ</button>`).join('')}
-              </div>
-            </div>
-          `).join('')}
-        </div>
+      <div class="detail-text">
+        <b>${it.name}${plus(it)}</b> ｜ 武器スキル: <b style="color:#00ffff;">${it.skill.name}</b> (スペルブック時CD: ${(it.skill.cd * 2 / 1000).toFixed(1)}秒)
+      </div>
+      <div class="detail-actions">
+        <button class="act-btn primary" data-town="sb-set-pack" data-idx="0">スロット [1] にセット</button>
+        <button class="act-btn primary" data-town="sb-set-pack" data-idx="1">スロット [2] にセット</button>
+        <button class="act-btn primary" data-town="sb-set-pack" data-idx="2">スロット [3] にセット</button>
       </div>
     `;
   }
@@ -642,11 +692,24 @@ export class UIManager {
         } else if (act === 'equip-exs') {
           state.equippedExsId = el.dataset.id;
           this.onToast(`⚡ ExS【${EXS_LIST[state.equippedExsId].name}】を装備！`);
-        } else if (act === 'sb-set') {
+        } else if (act === 'sb-select-pack') {
+          this.selectedPackIdx = Number(el.dataset.pack);
+        } else if (act === 'sb-set-pack') {
+          const idx = Number(el.dataset.idx);
+          const src = BACKPACK[this.selectedPackIdx];
+          if (src && src.skill) {
+            SPELLBOOK_SLOTS[idx] = {
+              weaponType: src.type,
+              weaponName: src.name,
+              skillName: src.skill.name,
+              cd: src.skill.cd * 2
+            };
+            this.onToast(`📖 スロット${idx + 1}に【${src.skill.name}】を登録！`);
+          }
+        } else if (act === 'sb-set-item') {
           const idx = Number(el.dataset.idx);
           const wType = el.dataset.wtype;
-          const allWeps = [state.weapon, EQUIPPED.sub_weapon, ...BACKPACK, ...STORAGE];
-          const src = allWeps.find((it) => it && it.type === wType);
+          const src = [state.weapon, EQUIPPED.sub_weapon].find((it) => it && it.type === wType);
           if (src && src.skill) {
             SPELLBOOK_SLOTS[idx] = {
               weaponType: src.type,
