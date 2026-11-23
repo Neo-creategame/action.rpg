@@ -22,6 +22,13 @@
       <div id="boss-hp-bar" class="boss-hp-fill"></div>
       <span id="boss-hp-text" class="bar-label">1000 / 1000</span>
     </div>
+    <div id="boss-extra-hud" class="boss-extra-row hidden">
+      <span id="boss-weak-badge" class="weak-badge hidden">弱点: 近接</span>
+      <div id="boss-sub-bar-wrap" class="boss-sub-wrap hidden">
+        <div id="boss-sub-bar" class="boss-sub-fill"></div>
+        <span id="boss-sub-text" class="bar-label">ブレイク 0%</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -84,6 +91,11 @@
 
 <!-- 右下：アクションアイコン -->
 <div id="hud-bottom-right">
+  <div id="spellbook-hud-slots" class="hidden" style="display:flex; gap:8px;">
+    <div class="skill-slot sb-slot"><span class="key-hint">1</span><span class="slot-icon" id="sb-name-0">未登録</span><span class="slot-cd" id="sb-cd-0">-</span></div>
+    <div class="skill-slot sb-slot"><span class="key-hint">2</span><span class="slot-icon" id="sb-name-1">未登録</span><span class="slot-cd" id="sb-cd-1">-</span></div>
+    <div class="skill-slot sb-slot"><span class="key-hint">3</span><span class="slot-icon" id="sb-name-2">未登録</span><span class="slot-cd" id="sb-cd-2">-</span></div>
+  </div>
   <div class="skill-slot" id="slot-dodge">
     <span class="key-hint">Shift / 右ｸﾘｯｸ</span>
     <span class="slot-icon">回避</span>
