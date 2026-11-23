@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { EXP_PER_KILL, expNeed, goldFor, DROP_RATE, EXS_GAUGE_MAX } from './data.js';
 import {
   state, SAVE, PLAYER, bossDmgMult, wear,
-  rollWeapon, rollArmor, randomSlot, rollArtifact, addToPack, saveGame
+  rollWeapon, rollArmor, randomSlot, rollArtifact, addToPack, saveGame,hasSynergy, artifactStat, maxHp
 } from './save.js';
 
 function getBossDefinition(floor) {
@@ -295,7 +295,8 @@ export class EnemyManager {
       dashVel: new THREE.Vector3(),
       stunUntil: 0,
       slowUntil: 0,
-      hitFlashUntil: 0
+      hitFlashUntil: 0,
+      bleedCount: 0
     };
 
     this.enemies.push(enemy);
@@ -368,7 +369,8 @@ export class EnemyManager {
       if (enemy.isAdaptiveBroken) {
         dmg = Math.round(dmg * 2.5);
       } else {
-        const stunBonus = 1.3 + (state.weapon?.type === 'mubi' && state.artifacts?.some?.(a => a?.id === 'motif_mubi') ? 0.55 : 0);
+        const mubiBonus = hasSynergy('awake_mubi') ? 0.85 : (artifactStat('motif_mubi') / 100);
+        const stunBonus = 1.3 + mubiBonus;
         dmg = Math.round(dmg * stunBonus);
       }
     }
@@ -446,6 +448,21 @@ export class EnemyManager {
     enemy.hp = Math.max(0, enemy.hp - dmg);
     enemy.hitFlashUntil = now + 90;
 
+    const bleedPerHit = artifactStat('bleed');
+    if (bleedPerHit > 0 && enemy.hp > 0 && !opts.isBleedProc) {
+      enemy.bleedCount = (enemy.bleedCount || 0) + bleedPerHit;
+      const threshold = hasSynergy('crimson_harvest') ? 4 : 5;
+      if (enemy.bleedCount >= threshold) {
+        enemy.bleedCount = 0;
+        const bleedDmg = Math.max(1, Math.round(enemy.maxHp * 0.025));
+        this.damageEnemy(enemy, bleedDmg, { color: 0xff1144, isCrit: true, isBleedProc: true, attackCategory: 'skill' });
+        if (hasSynergy('crimson_harvest') && opts.playerRef) {
+          const heal = Math.max(1, Math.round(maxHp() * 0.02));
+          opts.playerRef.hp = Math.min(maxHp(), opts.playerRef.hp + heal);
+        }
+      }
+    }
+
     if (opts.stunMs) {
       enemy.stunUntil = Math.max(enemy.stunUntil, now + opts.stunMs);
       enemy.state = 'idle';
@@ -492,6 +509,17 @@ export class EnemyManager {
       const heal = Math.round(this.activeBoss.maxHp * 0.05);
       this.activeBoss.hp = Math.min(this.activeBoss.maxHp, this.activeBoss.hp + heal);
       this.onToast(`🩸 手下撃破によりボスのHPが5%回復！`);
+    }
+    
+    if (!enemy.isBoss && state.weapon?.type === 'inferno_scythe') {
+      if (this.playerRef) {
+        const heal = Math.round(maxHp() * 0.12);
+        this.playerRef.hp = Math.min(maxHp(), this.playerRef.hp + heal);
+      }
+      if (this.activeBoss && this.activeBoss.hp > 0) {
+        this.addBossHellfire(20);
+        this.onToast('🔥 魂吸収！HP12%回復＆ボス業火+20%');
+      }
     }
 
     if (this.activeBoss === enemy) {
