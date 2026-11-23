@@ -54,6 +54,7 @@ export class UIManager {
       this.townTab = e.detail || 'inn';
       this.openModal('town');
   }
+  }
 
   isOpen() {
     return this.activeModal !== null;
