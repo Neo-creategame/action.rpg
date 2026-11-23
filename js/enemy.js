@@ -76,6 +76,12 @@ function getBossDefinition(floor) {
     dropWep: drops[Math.floor(Math.random() * drops.length)]
   };
 }
+const RARE_MONSTERS = [
+  { name: '⚠️【暴虐の巨人】タイタン',     color: 0xff8c00, scale: 1.65, hpMult: 3.2, atkMult: 1.6, speed: 0.065, range: 3.0, ranged: false, buffType: 'hp' },
+  { name: '⚠️【疾風の暗殺者】シャドウ',   color: 0x00ffff, scale: 1.15, hpMult: 2.2, atkMult: 1.8, speed: 0.145, range: 2.4, ranged: false, buffType: 'atk' },
+  { name: '⚠️【深淵の魔導士】ウォーロック', color: 0xb15cff, scale: 1.30, hpMult: 2.5, atkMult: 1.7, speed: 0.080, range: 3.2, ranged: true,  buffType: 'atk' },
+  { name: '⚠️【黄金の守護者】ガーディアン', color: 0xffd36a, scale: 1.50, hpMult: 3.5, atkMult: 1.4, speed: 0.070, range: 2.8, ranged: false, buffType: 'hp' }
+];
 
 export class EnemyManager {
   constructor(scene, camera, world, onToast, onDamagePopup) {
@@ -126,25 +132,54 @@ export class EnemyManager {
     const scaleMult = 1 + (floor - 1) * 0.22;
 
     if (!isBossFloor) {
+      let rareSpawned = false;
       spawnPoints.forEach((pt) => {
-        const isRare = Math.random() < 0.14;
+        // 1フロアにつき最大1体、8%の確率で異名持ちレアモンスターが乱入
+        const isRare = !rareSpawned && Math.random() < 0.08;
+        if (isRare) {
+          rareSpawned = true;
+          const rDef = RARE_MONSTERS[Math.floor(Math.random() * RARE_MONSTERS.length)];
+          const hp = Math.round(220 * scaleMult * rDef.hpMult);
+          const atk = Math.round(18 * (1 + (floor - 1) * 0.16) * rDef.atkMult);
+          this.onToast(`⚠️ 警告！異名持ち ${rDef.name} が乱入！`);
+
+          this.createEnemy({
+            name: rDef.name,
+            x: pt.x,
+            z: pt.z,
+            color: rDef.color,
+            scale: rDef.scale,
+            hp,
+            maxHp: hp,
+            atk,
+            speed: rDef.speed,
+            atkRange: rDef.range,
+            isBoss: false,
+            isRare: true,
+            rareBuffType: rDef.buffType,
+            ranged: rDef.ranged,
+            floor
+          });
+          return;
+        }
+
         const base = mobTypes[Math.floor(Math.random() * mobTypes.length)];
-        const hp = Math.round(base.hp * scaleMult * (isRare ? 2.2 : 1.0));
-        const atk = Math.round(base.atk * (1 + (floor - 1) * 0.16) * (isRare ? 1.4 : 1.0));
+        const hp = Math.round(base.hp * scaleMult);
+        const atk = Math.round(base.atk * (1 + (floor - 1) * 0.16));
 
         this.createEnemy({
-          name: isRare ? `★レア・${base.name}` : base.name,
+          name: base.name,
           x: pt.x,
           z: pt.z,
-          color: isRare ? 0xffd36a : base.color,
-          scale: base.scale * (isRare ? 1.2 : 1.0),
+          color: base.color,
+          scale: base.scale,
           hp,
           maxHp: hp,
           atk,
           speed: base.speed,
           atkRange: base.range,
           isBoss: false,
-          isRare,
+          isRare: false,
           ranged: !!base.ranged,
           floor
         });
@@ -565,21 +600,28 @@ export class EnemyManager {
         if (addToPack(art)) this.onToast(`🔮 遺物ドロップ【${art.name}】！`);
       }
       this.onToast(`🏆 ${enemy.floor}.5F ボス撃破！階段開放＆ExS+40%`);
-    } else if (Math.random() < (enemy.isRare ? 0.65 : DROP_RATE)) {
-      const r = Math.random();
-      let drop = null;
-      if (r < 0.45) {
-        const types = ['sword', 'dual', 'bow', 'greatsword', 'spear', 'spellbook'];
-        drop = rollWeapon(types[Math.floor(Math.random() * types.length)], enemy.floor);
-      } else if (r < 0.85) {
-        drop = rollArmor(randomSlot(), enemy.floor);
+    } else if (enemy.isRare) {
+      // ★異名持ちレアモンスター撃破：永続ステータス強化＋初回スペルブック確定ドロップ
+      if (enemy.rareBuffType === 'hp') {
+        PLAYER.bonusHp = (PLAYER.bonusHp || 0) + 100;
+        if (this.playerRef) this.playerRef.hp += 100;
+        this.onToast('🌟 レア討伐報酬！基礎最大HP +100（永続）！');
       } else {
-        drop = rollArtifact();
+        PLAYER.bonusAtk = (PLAYER.bonusAtk || 0) + 50;
+        this.onToast('🌟 レア討伐報酬！基礎攻撃力 +50（永続）！');
       }
-      if (drop && addToPack(drop)) {
-        this.onToast(`✨ ドロップ: ${drop.name || drop.label}`);
+
+      if (!SAVE.spellbookDropped) {
+        const sb = rollWeapon('spellbook', enemy.floor);
+        if (addToPack(sb)) {
+          SAVE.spellbookDropped = true;
+          this.onToast('📖 初回レア討伐特典【スペルブック】を入手！');
+        }
+      } else if (Math.random() < 0.5) {
+        const art = rollArtifact();
+        if (addToPack(art)) this.onToast(`🔮 遺物ドロップ【${art.name}】！`);
       }
-    }
+    } else if (Math.random() < DROP_RATE) {
 
     saveGame();
   }
