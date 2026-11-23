@@ -4,7 +4,7 @@ import {
 } from './data.js';
 import {
   state, EQUIPPED, maxHp, atkTotal, takeDamage, wear, wearArmor,
-  hasSynergy, artifactStat, saveGame, SPELLBOOK_SLOT
+  hasSynergy, artifactStat, saveGame, SPELLBOOK_SLOTS
 } from './save.js';
 
 const PLAYER_HEIGHT = 2.2;
