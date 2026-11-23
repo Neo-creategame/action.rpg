@@ -263,6 +263,13 @@ export class EnemyManager {
     warnRing.rotation.x = -Math.PI / 2;
     warnRing.position.y = 0.06;
     root.add(warnRing);
+    const stunBox = new THREE.Mesh(
+      new THREE.BoxGeometry(1.35 * s, 2.1 * s, 1.35 * s),
+      new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.32, wireframe: false })
+    );
+    stunBox.position.y = 1.05 * s;
+    stunBox.visible = false;
+    root.add(stunBox);
 
     const hpBg = new THREE.Mesh(
       new THREE.PlaneGeometry(1.4 * s, 0.16),
@@ -790,7 +797,11 @@ export class EnemyManager {
 
       if (now < enemy.stunUntil) {
         enemy.warnMat.opacity = 0;
+        enemy.stunBox.visible = true;
+        enemy.stunBox.rotation.y += dt * 2.5;
         continue;
+      } else {
+        enemy.stunBox.visible = false;
       }
 
       const speedMult = now < enemy.slowUntil ? 0.45 : 1.0;
