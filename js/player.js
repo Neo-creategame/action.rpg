@@ -4,7 +4,7 @@ import {
 } from './data.js';
 import {
   state, EQUIPPED, maxHp, atkTotal, takeDamage, wear, wearArmor,
-  hasSynergy, artifactStat, saveGame
+  hasSynergy, artifactStat, saveGame, SPELLBOOK_SLOT
 } from './save.js';
 
 const PLAYER_HEIGHT = 2.2;
@@ -67,6 +67,7 @@ export class Player {
     this.comboResetTimer = 0;
     this.nextAtkTime = 0;
     this.nextSkillTime = 0;
+    this.nextSbTimes = [0, 0, 0];
     this.nextQTime = 0;
     this.nextDodgeTime = 0;
     this.dodgeUntil = 0;
@@ -163,6 +164,9 @@ export class Player {
       if (e.code === 'KeyZ') this.triggerExS();
       if (e.code === 'KeyX') this.swapWeapon();
       if (e.code === 'KeyF') this.tryInteract();
+      if (e.code === 'Digit1') this.triggerSpellbookSlot(0);
+      if (e.code === 'Digit2') this.triggerSpellbookSlot(1);
+      if (e.code === 'Digit3') this.triggerSpellbookSlot(2);
     });
 
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
@@ -373,80 +377,98 @@ export class Player {
     const cdCut = Math.min(0.65, (artifactStat('cdPct') + artifactStat('motif_chronos') + (hasSynergy('chronos_overdrive') ? 15 : 0)) / 100);
     this.nextSkillTime = now + Math.round(w.skill.cd * (1 - cdCut));
 
-    // 45F【魔力反応】エレメンタリストが居ればEスキル使用に反応して反撃！
     this.enemyManager.onPlayerSkillUsed(this.root.position);
+    this.executeWeaponSkillByType(w.type, 1.0);
+    wear(w, DURABILITY.weaponSkill);
+  }
 
-    const dmg = atkTotal(this.hp);
+  // ★追加：スペルブックの1・2・3キー発動（威力50%・CD2倍）
+  triggerSpellbookSlot(slotIdx) {
+    const w = state.weapon;
+    if (!w || w.type !== 'spellbook') return;
+    const slotData = SPELLBOOK_SLOTS[slotIdx];
+    if (!slotData) return this.onToast(`スロット${slotIdx + 1}に魔術が未登録です`);
+
+    const now = performance.now();
+    if (now < this.nextSbTimes[slotIdx] || now < this.dodgeUntil) return;
+
+    const cdCut = Math.min(0.65, (artifactStat('cdPct') + artifactStat('motif_chronos') + (hasSynergy('chronos_overdrive') ? 15 : 0)) / 100);
+    this.nextSbTimes[slotIdx] = now + Math.round(slotData.cd * (1 - cdCut));
+
+    this.enemyManager.onPlayerSkillUsed(this.root.position);
+    this.onToast(`📖 魔術発動【${slotData.skillName}】！`);
+    this.executeWeaponSkillByType(slotData.weaponType, 0.5);
+    wear(w, 1);
+  }
+
+  executeWeaponSkillByType(weaponType, powerMult = 1.0) {
+    const now = performance.now();
+    const dmg = Math.round(atkTotal(this.hp) * powerMult);
     this.model.rotation.y = this.yaw;
 
-    if (w.type === 'mubi') {
-      // 【蒼焔連突】突進攻撃・最大8ヒット（1ヒットにつき蒼焔+3）
+    if (weaponType === 'mubi') {
       this.dodgeDir.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
       this.dodgeUntil = now + 260;
       for (let i = 0; i < 4; i++) {
         setTimeout(() => {
           this.spawnSlashArc(4.8, 0x00ffff, 1.5);
           const res = this.performMeleeHit(4.8, Math.round(dmg * 0.55), 0x00ffff, false, i === 3, 0, 0, 'skill');
-          if (res.hits > 0) {
+          if (res.hits > 0 && state.weapon?.type === 'mubi') {
             const add = res.hits * 3 * (hasSynergy('awake_mubi') ? 2 : 1);
             this.souenGauge = Math.min(120, this.souenGauge + add);
           }
         }, i * 55);
       }
-    } else if (w.type === 'apocalypse') {
-      // 【メテオ・フォール】指定地点周辺に5発の隕石（140%ダメージ＋0.8秒スタン / 1ヒットにつき終末+8）
-      this.callMeteors(5, Math.round(dmg * 1.4), 0xff1144, 800, 8);
-    } else if (w.type === 'astral_orb') {
-      // 【アストラル・パルス】周囲150px(6.0m)に140%衝撃波＋敵弾消去＋ノックバック（命中1体につき星力+15）
+    } else if (weaponType === 'apocalypse') {
+      this.callMeteors(5, Math.round(dmg * 1.4), 0xff1144, 800, state.weapon?.type === 'apocalypse' ? 8 : 0);
+    } else if (weaponType === 'astral_orb') {
       this.spawnSlashArc(6.2, 0x10b981, 2.2);
       const clearedOrbs = this.enemyManager.clearProjectilesInRadius(this.root.position, 7.5);
       if (clearedOrbs > 0) this.onToast(`✨ 敵弾 ${clearedOrbs}発 消去！`);
       const res = this.performMeleeHit(6.2, Math.round(dmg * 1.4), 0x10b981, true, true, 0, 2.0, 'skill');
-      if (res.hits > 0) this.starGauge = Math.min(100, this.starGauge + res.hits * 15);
-    } else if (w.type === 'chronos_bow') {
-      // 【バックステップ・アロー】無敵状態で後方ステップ＋前方5方向へ90%扇状射撃
+      if (res.hits > 0 && state.weapon?.type === 'astral_orb') this.starGauge = Math.min(100, this.starGauge + res.hits * 15);
+    } else if (weaponType === 'chronos_bow') {
       this.invulnUntil = Math.max(this.invulnUntil, now + 350);
       this.dodgeDir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).normalize();
       this.dodgeUntil = now + 220;
       [-0.28, -0.14, 0, 0.14, 0.28].forEach((off) => {
-        this.fireProjectile(off, Math.round(dmg * 0.9), 0x93c5fd, { isChronosArrow: true, attackCategory: 'skill' });
+        this.fireProjectile(off, Math.round(dmg * 0.9), 0x93c5fd, { isChronosArrow: state.weapon?.type === 'chronos_bow', attackCategory: 'skill' });
       });
-    } else if (w.type === 'inferno_scythe') {
-      // 【ソウル・ハーベスト】220%広範囲斬撃＋最大HP15%回復＋ボス業火+25%
+    } else if (weaponType === 'inferno_scythe') {
       this.spawnSlashArc(6.0, 0xff5500, 2.0);
       this.addCameraShake(0.2, 0.15);
       this.performMeleeHit(6.0, Math.round(dmg * 2.2), 0xff5500, true, true, 0, 0, 'skill');
       const heal = Math.round(maxHp() * 0.15);
       this.hp = Math.min(maxHp(), this.hp + heal);
-      this.onToast(`🔥 ソウル・ハーベスト！HP +${heal}`);
       if (this.enemyManager.activeBoss) this.enemyManager.addBossHellfire(25);
-    } else if (w.type === 'bow') {
+    } else if (weaponType === 'bow') {
       [-0.22, 0, 0.22].forEach((off) => this.fireProjectile(off, dmg, 0xffd36a, { attackCategory: 'skill' }));
-    } else if (w.type === 'spellbook') {
+    } else if (weaponType === 'spellbook') {
       this.fireProjectile(-0.15, Math.round(dmg * 1.1), 0xff4500, { homing: true, attackCategory: 'skill' });
       this.fireProjectile(0, Math.round(dmg * 1.2), 0x00ffff, { homing: true, attackCategory: 'skill' });
       this.fireProjectile(0.15, Math.round(dmg * 1.1), 0xffd36a, { homing: true, attackCategory: 'skill' });
-    } else if (w.type === 'spear' || w.type === 'dragon_chain') {
+    } else if (weaponType === 'spear' || weaponType === 'dragon_chain') {
       this.dodgeDir.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
       this.dodgeUntil = now + 240;
       this.spawnSlashArc(6.0, 0xe0ffff, 1.5);
       this.performMeleeHit(6.0, Math.round(dmg * 1.75), 0xe0ffff, false, true, 600, 0, 'skill');
-    } else if (w.type === 'dual') {
+    } else if (weaponType === 'dual') {
       for (let i = 0; i < 4; i++) {
         setTimeout(() => {
           this.spawnSlashArc(4.2, i % 2 === 0 ? 0x7cf0a0 : 0x00ffff, 1.3);
           this.performMeleeHit(4.2, Math.round(dmg * 0.7), 0x7cf0a0, true, i === 3, 0, 0, 'skill');
         }, i * 75);
       }
-    } else if (w.type === 'eruption_wand') {
+    } else if (weaponType === 'eruption_wand') {
       this.callMeteors(3, Math.round(dmg * 1.3), 0xff5500, 500, 0);
+    } else if (weaponType === 'lightning_staff') {
+      [-0.3, -0.1, 0.1, 0.3].forEach((off) => this.fireProjectile(off, Math.round(dmg * 0.85), 0xffff00, { attackCategory: 'skill' }));
     } else {
       this.swingSwordAnimation(3);
       this.spawnSlashArc(5.5, 0xffd36a, 1.8);
       this.addCameraShake(0.18, 0.14);
       this.performMeleeHit(5.5, Math.round(dmg * 1.65), 0xffd36a, true, true, 0, 1.5, 'skill');
     }
-    wear(w, DURABILITY.weaponSkill);
   }
 
   // ==========================================
