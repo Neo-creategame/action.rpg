@@ -95,6 +95,7 @@ export class EnemyManager {
     this.enemyProjectiles = [];
     this.hazardZones = [];
     this.activeBoss = null;
+    this.enemyBeams = [];
     this.bossRoomCorners = [
       { x: -18, z: -18 }, { x: 18, z: -18 },
       { x: -18, z: 18 },  { x: 18, z: 18 }
@@ -115,6 +116,8 @@ export class EnemyManager {
 
     for (const h of this.hazardZones) this.scene.remove(h.mesh);
     this.hazardZones = [];
+    for (const b of this.enemyBeams) this.scene.remove(b.group);
+    this.enemyBeams = [];
   }
 
   spawnForFloor(floor, spawnPoints, bossPoint, isBossFloor = false, bossRoomCorners = null) {
@@ -751,11 +754,18 @@ export class EnemyManager {
       this.spawnHazardZone(targetPos.x, targetPos.z, 6.8, 0.85, Math.round(boss.atk * 1.8), 0x48bb78, true);
     } else if (pick === 'blaster') {
       const count = enraged ? 4 : 3;
-      this.onToast('⚡ ガスターブラスター照準！射線から離れろ！');
+      this.onToast('⚡ ガスターブラスター照準！赤い射線から離れろ！');
+      const baseAngle = Math.random() * Math.PI * 2;
       for (let i = 0; i < count; i++) {
-        const bx = targetPos.x + (Math.random() - 0.5) * 10;
-        const bz = targetPos.z + (Math.random() - 0.5) * 10;
-        this.spawnHazardZone(bx, bz, 2.4, 0.7, Math.round(boss.atk * 1.6), 0x00ffff, false);
+        // プレイヤー周囲の均等な角度から一斉にプレイヤーを通過する射線を配置
+        const angle = baseAngle + (Math.PI * 2 * i) / count;
+        const startPos = new THREE.Vector3(
+          targetPos.x + Math.cos(angle) * 14,
+          0,
+          targetPos.z + Math.sin(angle) * 14
+        );
+        const dir = targetPos.clone().sub(startPos).setY(0).normalize();
+        this.fireBossGasterBlaster(startPos, dir, Math.round(boss.atk * 1.65));
       }
     }
 
@@ -785,6 +795,80 @@ export class EnemyManager {
       isSafeZone
     });
   }
+  fireBossGasterBlaster(startPos, dir, atk) {
+    const length = 30;
+    const width = 1.6;
+    const midPos = startPos.clone().addScaledVector(dir, length * 0.5);
+    const rotY = Math.atan2(dir.x, dir.z);
+
+    // 1. 地面の赤い予測射線ライン
+    const warnMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, length),
+      new THREE.MeshBasicMaterial({ color: 0xff1144, side: THREE.DoubleSide, transparent: true, opacity: 0.45 })
+    );
+    warnMesh.rotation.x = -Math.PI / 2;
+    warnMesh.rotation.z = -rotY;
+    warnMesh.position.set(midPos.x, 0.08, midPos.z);
+    this.scene.add(warnMesh);
+
+    // 2. 砲口（ガスターブラスター風の浮遊スカルユニット）
+    const skull = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 1.3, 1.8),
+      new THREE.MeshStandardMaterial({ color: 0xf7fafc, emissive: 0x00ffff, emissiveIntensity: 0.4 })
+    );
+    skull.position.set(startPos.x, 1.4, startPos.z);
+    skull.rotation.y = rotY;
+    this.scene.add(skull);
+
+    // 0.65秒後に一斉に予測線を消して極太レーザー照射
+    setTimeout(() => {
+      this.scene.remove(warnMesh);
+      if (!this.activeBoss || this.activeBoss.hp <= 0) {
+        this.scene.remove(skull);
+        return;
+      }
+
+      const group = new THREE.Group();
+      group.add(skull);
+
+      // 外側の水色オーラ筒
+      const outerGeo = new THREE.CylinderGeometry(width * 0.65, width * 0.65, length, 14, 1, true);
+      outerGeo.rotateX(Math.PI / 2);
+      const outerMat = new THREE.MeshBasicMaterial({
+        color: 0x00ffff, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false
+      });
+      const outerBeam = new THREE.Mesh(outerGeo, outerMat);
+      outerBeam.position.set(midPos.x, 1.3, midPos.z);
+      outerBeam.rotation.y = rotY;
+      group.add(outerBeam);
+
+      // 内側の高輝度ホワイトコア
+      const innerGeo = new THREE.CylinderGeometry(width * 0.32, width * 0.32, length, 12);
+      innerGeo.rotateX(Math.PI / 2);
+      const innerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 });
+      const innerBeam = new THREE.Mesh(innerGeo, innerMat);
+      innerBeam.position.set(midPos.x, 1.3, midPos.z);
+      innerBeam.rotation.y = rotY;
+      group.add(innerBeam);
+
+      this.scene.add(group);
+      this.enemyBeams.push({ group, outerBeam, innerBeam, life: 0.4, maxLife: 0.4 });
+
+      // 直線ビームの当たり判定
+      if (this.playerRef && this.playerRef.root.position.y < 2.2) {
+        const p = this.playerRef.root.position;
+        const apx = p.x - startPos.x;
+        const apz = p.z - startPos.z;
+        const proj = apx * dir.x + apz * dir.z;
+        if (proj >= -0.5 && proj <= length + 0.5) {
+          const perpDist = Math.abs(apx * dir.z - apz * dir.x);
+          if (perpDist <= width * 0.65) {
+            this.playerRef.receiveEnemyAttack(atk, startPos);
+          }
+        }
+      }
+    }, 650);
+  }
 
   update(dt, player) {
     this.playerRef = player;
@@ -803,6 +887,19 @@ export class EnemyManager {
         this.damageEnemy(this.activeBoss, slip, { color: 0xff4500, attackCategory: 'skill' });
       }
     }
+    this.enemyBeams = this.enemyBeams.filter((b) => {
+      b.life -= dt;
+      const ratio = Math.max(0, b.life / b.maxLife);
+      b.outerBeam.scale.set(ratio, ratio, 1);
+      b.innerBeam.scale.set(ratio, ratio, 1);
+      b.outerBeam.material.opacity = ratio * 0.6;
+      b.innerBeam.material.opacity = ratio * 0.95;
+      if (b.life <= 0) {
+        this.scene.remove(b.group);
+        return false;
+      }
+      return true;
+    });
 
     this.hazardZones = this.hazardZones.filter((h) => {
       h.timer -= dt;
