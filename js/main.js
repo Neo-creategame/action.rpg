@@ -10,6 +10,25 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b0d12);
 scene.fog = new THREE.FogExp2(0x0b0d12, 0.018);
 
+// 全体を均一に照らす環境光（ダンジョン内の暗がり対策）
+const hemiLight = new THREE.HemisphereLight(0xa0c4ff, 0x2d3748, 1.4);
+scene.add(hemiLight);
+
+// 立体感と影を作るメインの平行光源
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
+dirLight.position.set(25, 45, 25);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+dirLight.shadow.camera.near = 1;
+dirLight.shadow.camera.far = 150;
+const d = 50;
+dirLight.shadow.camera.left = -d;
+dirLight.shadow.camera.right = d;
+dirLight.shadow.camera.top = d;
+dirLight.shadow.camera.bottom = -d;
+scene.add(dirLight);
+
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 200);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
