@@ -617,11 +617,17 @@ export class EnemyManager {
           SAVE.spellbookDropped = true;
           this.onToast('📖 初回レア討伐特典【スペルブック】を入手！');
         }
-      } else if (Math.random() < 0.5) {
+      } /*else if (Math.random() < 0.5) {
         const art = rollArtifact();
         if (addToPack(art)) this.onToast(`🔮 遺物ドロップ【${art.name}】！`);
-      }
+      }*/
     } else if (Math.random() < DROP_RATE) {
+      const = arm rollArmor(randomSlot(), enemy.floor);  
+      if (addToPack(arm)) this.onToast(`🛡️ ドロップ【${arm.label}】！`);
+      } else {
+        this.onToast('バッグがいっぱいで拾えなかった…');
+      }
+    }
 
     saveGame();
   }
