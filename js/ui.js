@@ -801,27 +801,43 @@ export class UIManager {
   // ==========================================
   renderPauseScreen(showFloorList = false) {
     const maxCleared = SAVE.cleared || 0;
+    const nextChallengeFloor = maxCleared + 1;
 
     if (!showFloorList) {
       this.modalBody.innerHTML = `
-        <div class="pause-menu">
-          <h2>⏸️ PAUSE MENU</h2>
-          <p class="muted">攻略済み最高: <b>${maxCleared > 0 ? `${maxCleared}.5F` : 'なし'}</b></p>
-          <button class="pause-btn primary" data-pause="resume">▶ ゲームに戻る (Tab)</button>
-          <button class="pause-btn" data-pause="town">🏰 0F 始まりの町へ帰還</button>
-          <button class="pause-btn" data-pause="floors" ${maxCleared === 0 ? 'disabled' : ''}>
-            🗺️ 攻略済みの階層を選ぶ (${maxCleared > 0 ? `1F 〜 ${maxCleared}.5F` : '未攻略'})
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; min-height:400px; padding:16px;">
+          <!-- 上部ヘッダーバー -->
+          <div style="background:rgba(30, 38, 52, 0.92); border:1px solid #4a5568; padding:10px 28px; font-size:16px; font-weight:bold; color:#cbd5e0; letter-spacing:0.5px; margin-bottom:6px;">
+            ポーズ中 攻略済み最高: ${maxCleared > 0 ? `${maxCleared}.5F` : 'なし'} (Tabで再開)
+          </div>
+
+          <button class="pause-btn" style="width:auto; min-width:250px; margin:0; padding:11px 24px; font-size:15px; font-weight:bold; background:#252d3d; border:1px solid #4a5568;" data-pause="latest">
+            ⚡ 最新の挑戦階へ (${nextChallengeFloor}F)
           </button>
-          <button class="pause-btn" data-pause="auto-sell">
-            💰 ドロップ装備の自動売却: ${SAVE.autoSell ? 'ON' : 'OFF'}
+
+          <button class="pause-btn" style="width:auto; min-width:130px; margin:0; padding:11px 24px; font-size:15px; font-weight:bold; background:#252d3d; border:1px solid #4a5568;" data-pause="town">
+            町へ戻る
           </button>
-          <button class="pause-btn" data-pause="auto-dismantle" ${PLAYER.lv < 200 ? 'disabled' : ''}>
-            ♻️ 低ティア防具の自動分解 (Lv200+): ${SAVE.autoDismantle ? 'ON' : 'OFF'}
+
+          <button class="pause-btn" style="width:auto; min-width:270px; margin:0; padding:11px 24px; font-size:15px; font-weight:bold; background:#252d3d; border:1px solid #4a5568;" data-pause="floors" ${maxCleared === 0 ? 'disabled' : ''}>
+            攻略済みの階層一覧から選ぶ
+          </button>
+
+          <button class="pause-btn" style="width:auto; min-width:250px; margin:0; padding:11px 24px; font-size:15px; font-weight:bold; background:#252d3d; border:1px solid #4a5568;" data-pause="auto-dismantle" ${PLAYER.lv < 200 ? 'disabled' : ''}>
+            ♻️ 弱防具の自動分解: ${PLAYER.lv < 200 ? 'Lv200解放' : (SAVE.autoDismantle ? 'ON' : 'OFF')}
+          </button>
+
+          <button class="pause-btn" style="width:auto; min-width:140px; margin:0; padding:11px 24px; font-size:15px; font-weight:bold; background:#252d3d; border:1px solid #4a5568;" data-pause="save">
+            手動セーブ
+          </button>
+
+          <button class="pause-btn" style="width:auto; min-width:160px; margin:0; padding:11px 24px; font-size:15px; font-weight:bold; background:#252d3d; border:1px solid #4a5568;" data-pause="resume">
+            ゲームに戻る
           </button>
         </div>
       `;
     } else {
-      // 1ページ5階層ずつ降順表示（例: 506〜502）
+      // 1ページ5階層ずつ降順表示（左: ボス階 .5F / 右: 通常階 F）
       const perPage = 5;
       const totalPages = Math.max(1, Math.ceil(maxCleared / perPage));
       if (this.floorPage === undefined) this.floorPage = 0;
@@ -853,16 +869,16 @@ export class UIManager {
 
           <!-- ページネーション（← 前のページ / 次のページ →） -->
           <div style="display:flex; gap:110px; margin-bottom:18px;">
-            <button class="pause-btn" style="width:165px; margin:0; padding:10px 0; font-weight:bold; background:#252d3d;" data-pause="prev-page" ${this.floorPage <= 0 ? 'disabled' : ''}>
+            <button class="pause-btn" style="width:165px; margin:0; padding:10px 0; font-weight:bold; background:#252d3d; border:1px solid #4a5568;" data-pause="prev-page" ${this.floorPage <= 0 ? 'disabled' : ''}>
               ← 前のページ
             </button>
-            <button class="pause-btn" style="width:165px; margin:0; padding:10px 0; font-weight:bold; background:#252d3d;" data-pause="next-page" ${this.floorPage >= totalPages - 1 ? 'disabled' : ''}>
+            <button class="pause-btn" style="width:165px; margin:0; padding:10px 0; font-weight:bold; background:#252d3d; border:1px solid #4a5568;" data-pause="next-page" ${this.floorPage >= totalPages - 1 ? 'disabled' : ''}>
               次のページ →
             </button>
           </div>
 
           <!-- 最下部：戻るボタン -->
-          <button class="pause-btn" style="width:110px; margin:0; padding:10px 0; font-weight:bold; background:#252d3d;" data-pause="back">
+          <button class="pause-btn" style="width:110px; margin:0; padding:10px 0; font-weight:bold; background:#252d3d; border:1px solid #4a5568;" data-pause="back">
             戻る
           </button>
         </div>
@@ -872,8 +888,12 @@ export class UIManager {
     this.modalBody.querySelectorAll('[data-pause]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const act = btn.dataset.pause;
-        if (act === 'resume') this.closeAll();
-        else if (act === 'town') {
+        if (act === 'resume') {
+          this.closeAll();
+        } else if (act === 'latest') {
+          this.closeAll();
+          window.dispatchEvent(new CustomEvent('warp-floor', { detail: { floor: nextChallengeFloor, isBoss: false } }));
+        } else if (act === 'town') {
           this.closeAll();
           window.dispatchEvent(new CustomEvent('warp-floor', { detail: { floor: 0, isBoss: false } }));
         } else if (act === 'floors') {
@@ -887,14 +907,15 @@ export class UIManager {
           this.renderPauseScreen(true);
         } else if (act === 'back') {
           this.renderPauseScreen(false);
-        } else if (act === 'auto-sell') {
-          SAVE.autoSell = !SAVE.autoSell;
-          saveGame();
-          this.renderPauseScreen(false);
         } else if (act === 'auto-dismantle') {
-          SAVE.autoDismantle = !SAVE.autoDismantle;
+          if (PLAYER.lv >= 200) {
+            SAVE.autoDismantle = !SAVE.autoDismantle;
+            saveGame();
+            this.renderPauseScreen(false);
+          }
+        } else if (act === 'save') {
           saveGame();
-          this.renderPauseScreen(false);
+          this.onToast('💾 セーブデータを保存しました！');
         }
       });
     });
