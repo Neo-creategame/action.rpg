@@ -690,7 +690,7 @@ export class UIManager {
               weaponType: src.type,
               weaponName: src.name,
               skillName: src.skill.name,
-              cd: src.skill.cd * 2
+              cd: src.skill.cd * 2,
               weaponItem: src
             };
             this.onToast(`📖 スロット${idx + 1}に【${src.skill.name}】を登録！`);
