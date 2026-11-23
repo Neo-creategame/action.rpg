@@ -42,9 +42,6 @@ export class UIManager {
       if (e.code === 'KeyI') {
         e.preventDefault();
         this.toggleModal('bag');
-      } else if (e.code === 'KeyT') {
-        e.preventDefault();
-        this.toggleModal('town');
       } else if (e.code === 'Escape' && this.activeModal) {
         this.closeModal();
       } else if (e.code === 'KeyR') {
@@ -53,6 +50,9 @@ export class UIManager {
         this.usePotionKind('full');
       }
     });
+    window.addEventListener('open-town-tab', (e) => {
+      this.townTab = e.detail || 'inn';
+      this.openModal('town');
   }
 
   isOpen() {
