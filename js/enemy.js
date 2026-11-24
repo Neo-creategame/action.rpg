@@ -135,12 +135,13 @@ export class EnemyManager {
     const scaleMult = 1 + (floor - 1) * 0.22;
 
     if (!isBossFloor) {
-      let rareSpawned = false;
-      spawnPoints.forEach((pt) => {
-        // 1フロアにつき最大1体、8%の確率で異名持ちレアモンスターが乱入
-        const isRare = !rareSpawned && Math.random() < 0.08;
-        if (isRare) {
-          rareSpawned = true;
+      // 1フロアにつき1回だけ6%で抽選し、当選したらランダムな1箇所の湧きポイントをレア化
+      const rareIndex = (spawnPoints.length > 0 && Math.random() < 0.06)
+        ? Math.floor(Math.random() * spawnPoints.length)
+        : -1;
+
+      spawnPoints.forEach((pt, idx) => {
+        if (idx === rareIndex) {
           const rDef = RARE_MONSTERS[Math.floor(Math.random() * RARE_MONSTERS.length)];
           const hp = Math.round(220 * scaleMult * rDef.hpMult);
           const atk = Math.round(18 * (1 + (floor - 1) * 0.16) * rDef.atkMult);
