@@ -574,7 +574,7 @@ export class Player {
       // 【蒼焔・絶対凍結陣】蒼焔120消費。周囲に300%×8連撃＋3秒凍結（解除時30%破砕追撃）
       if (this.souenGauge < 120) return this.onToast('蒼焔ゲージ不足 (120必要)');
       this.souenGauge = 0;
-      this.onToast('❄️ 蒼焔・絶対凍結陣（8連撃＋凍結）！！');
+      this.onToast('❄️ 蒼焔・絶対凍結陣！！');
       this.addCameraShake(0.45, 0.28);
       this.onSlowMo(0.4);
       this.spawnFrostFlashLines(20);
@@ -597,9 +597,9 @@ export class Player {
       // 【アポカリプス・ノヴァ】終末100消費。3500%ダメージ＋4秒スタン＋ボスバリア破壊＋最大HP30%回復
       if (this.apoGauge < 100) return this.onToast('終末ゲージ不足 (100必要)');
       this.apoGauge = 0;
-      this.onToast('☄️ アポカリプス・ノヴァ（3500%＋バリア破壊）！！');
+      this.onToast('☄️ アポカリプス・ノヴァ！！');
       this.addCameraShake(0.6, 0.38);
-      this.spawnSlashArc(12.0, 0xff1144, 3.5);
+      this.spawnSlashArc(17.0, 0xff1144, 3.5);
       this.callMeteors(8, Math.round(dmg * 1.5), 0xff1144, 1000, 0);
 
       // ボスの無敵バリアを即座に破壊！
@@ -607,7 +607,7 @@ export class Player {
         this.enemyManager.breakBossBarrier('☄️ アポカリプス・ノヴァがボスの無敵バリアを粉砕！');
       }
 
-      this.performMeleeHit(12.0, Math.round(dmg * 35.0), 0xff1144, true, true, 4000, 0, 'skill');
+      this.performMeleeHit(17.0, Math.round(dmg * 35.0), 0xff1144, true, true, 4000, 0, 'skill');
       const heal = Math.round(maxHp() * 0.30);
       this.hp = Math.min(maxHp(), this.hp + heal);
       return;
@@ -617,7 +617,7 @@ export class Player {
       // 【アストラル・カノン】星力100消費。直線850px・幅96pxの極太ビームで2800%ダメージ＋2.5秒スタン
       if (this.starGauge < 100) return this.onToast('星力ゲージ不足 (100必要)');
       this.starGauge = 0;
-      this.onToast('🌟 アストラル・カノン（2800%極太ビーム）！！');
+      this.onToast('🌟 アストラル・カノン！！');
       this.fireAstralCannon(Math.round(dmg * 28.0));
       return;
     }
@@ -634,7 +634,7 @@ export class Player {
       // 【メギドフレイム】汎用ExSゲージ100消費。周囲に2500%ダメージ＋2.5秒スタン＋ボス業火+75%
       if (state.exsGauge < EXS_GAUGE_MAX) return;
       state.exsGauge = 0;
-      this.onToast('🔥 メギドフレイム（2500%＋業火+75%）！！');
+      this.onToast('🔥 メギドフレイム！！');
       this.addCameraShake(0.5, 0.3);
       this.spawnSlashArc(11.0, 0xff4500, 3.2);
       this.performMeleeHit(11.0, Math.round(dmg * 25.0), 0xff4500, true, true, 2500, 0, 'skill');
@@ -695,10 +695,10 @@ export class Player {
   fireAstralCannon(totalDmg) {
     this.addCameraShake(0.45, 0.28);
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
-    const length = 34;
+    const length = 50;
 
     const beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.6, 1.6, length, 16),
+      new THREE.CylinderGeometry(2.2, 2.2, length, 16),
       new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.9 })
     );
     beam.position.copy(this.root.position).add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(forward, length / 2);
@@ -714,7 +714,7 @@ export class Player {
       const proj = toE.dot(forward);
       if (proj < 0 || proj > length) continue;
       const perp = Math.hypot(toE.x - forward.x * proj, toE.z - forward.z * proj);
-      if (perp <= 2.4 + 0.8 * e.scale) {
+      if (perp <= 3.0 + 0.8 * e.scale) {
         this.enemyManager.damageEnemy(e, totalDmg, {
           color: 0x10b981, isCrit: true, stunMs: 2500, attackCategory: 'skill'
         });
@@ -821,18 +821,52 @@ export class Player {
   spawnAstralBits(count, durationSec) {
     this.clearAstralBits();
     this.bitActiveUntil = performance.now() + durationSec * 1000;
+
     for (let i = 0; i < count; i++) {
-      const bit = new THREE.Mesh(
-        new THREE.OctahedronGeometry(0.26, 0),
-        new THREE.MeshBasicMaterial({ color: 0x10b981 })
+      const bitGroup = new THREE.Group();
+
+      // 中央の結晶コア（エメラルド発光）
+      const core = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.24, 0),
+        new THREE.MeshBasicMaterial({ color: 0x34d399 })
       );
-      this.scene.add(bit);
-      this.astralBits.push({ mesh: bit, angleOffset: (Math.PI * 2 * i) / count });
+      bitGroup.add(core);
+
+      // 外周の魔法陣リング（シアン発光）
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.42, 0.03, 8, 24),
+        new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.85 })
+      );
+      ring.rotation.x = Math.PI / 2;
+      bitGroup.add(ring);
+
+      // 内側の斜めリング（ホワイトシアン）
+      const innerRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.32, 0.02, 8, 20),
+        new THREE.MeshBasicMaterial({ color: 0xa7f3d0, transparent: true, opacity: 0.7 })
+      );
+      innerRing.rotation.y = Math.PI / 3;
+      bitGroup.add(innerRing);
+
+      this.scene.add(bitGroup);
+      this.astralBits.push({
+        mesh: bitGroup,
+        core,
+        ring,
+        innerRing,
+        angleOffset: (Math.PI * 2 * i) / count
+      });
     }
   }
 
   clearAstralBits() {
-    for (const b of this.astralBits) this.scene.remove(b.mesh);
+    for (const b of this.astralBits) {
+      this.scene.remove(b.mesh);
+      b.mesh.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      });
+    }
     this.astralBits = [];
   }
 
