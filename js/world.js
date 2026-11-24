@@ -483,6 +483,10 @@ export class World {
         this.onToast('🎁 宝箱を開けた！（バッグ満杯）');
       }
     } else if (item.type === 'fountain' && !item.used) {
+      if (player.isTriggerMode && player.isTriggerMode()) {
+        this.onToast('⚠️ トリオン体状態のため回復の泉は効果がない！');
+        return;
+      }
       item.used = true;
       item.water.material.color.setHex(0x4a5568);
       const heal = Math.round(maxHpVal * 0.5);
@@ -551,6 +555,7 @@ export class World {
     this.spawnTownFacility(-14,  16, 'gacha',   0xd53f8c, '[F] 🎰 召喚ガチャ');
     this.spawnTownFacility( 14,  16, 'exs',     0xb15cff, '[F] ⚡ ExS変更');
     this.spawnTownFacility(  0,  16, 'magic',   0x9f7aea, '[F] 📖 魔導台(スペルブック)');
+    this.spawnTownFacility(  0, -10, 'trigger', 0x00ffff, '[F] 💠 トリガー開発室');
 
     // 北奥にダンジョン（1F）への入口ポータル
     this.createExitPortal(0, -28, false);
