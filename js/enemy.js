@@ -609,6 +609,13 @@ export class EnemyManager {
 
     if (enemy.isBoss) {
       SAVE.cleared = Math.max(SAVE.cleared, enemy.floor);
+      if (enemy.floor >= 150 && !SAVE.triggerHolderDropped) {
+        const th = rollWeapon('trigger_holder', enemy.floor);
+        if (addToPack(th)) {
+          SAVE.triggerHolderDropped = true;
+          this.onToast('💠 150.5F討伐報酬【トリガーホルダー】を入手！');
+        }
+      }
       const rWep = Math.random();
       if (enemy.floor >= 10 && rWep < 0.15) {
         const bw = rollWeapon(enemy.dropWep, enemy.floor);
