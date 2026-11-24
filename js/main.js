@@ -3,10 +3,10 @@ import { World } from './world.js';
 import { EnemyManager } from './enemy.js';
 import { Player } from './player.js';
 import { UIManager } from './ui.js';
-import { expNeed, EXS_GAUGE_MAX, DEATH } from './data.js';
+import { expNeed, EXS_GAUGE_MAX, DEATH, TRIGGER_LIST, } from './data.js';
 import {
   state, SAVE, PLAYER, EQUIPPED, BACKPACK, STORAGE, SPELLBOOK_SLOTS,
-  maxHp, atkTotal, plus, wear, saveGame
+  maxHp, atkTotal, plus, wear, saveGame, TRIGGER_SLOTS,
 } from './save.js';
 
 const scene = new THREE.Scene();
@@ -249,8 +249,12 @@ function updateHud(now) {
   }
 
   lvSpan.textContent = PLAYER.lv;
+  const isTrig = (w.type === 'trigger_holder');
   hpBar.style.width = `${(player.hp / mHp) * 100}%`;
-  hpText.textContent = `HP ${Math.ceil(player.hp)} / ${mHp}`;
+  hpBar.style.background = isTrig ? 'linear-gradient(90deg, #00b5d8, #00ffff)' : '';
+  hpText.textContent = isTrig
+    ? `TRION ${Math.ceil(player.hp)} / ${mHp}`
+    : `HP ${Math.ceil(player.hp)} / ${mHp}`;
   expBar.style.width = `${Math.min(100, (PLAYER.exp / expNeed(PLAYER.lv)) * 100)}%`;
 
   atkSpan.textContent = atkTotal(player.hp).toLocaleString();
@@ -288,18 +292,43 @@ function updateHud(now) {
   cdDodge.textContent = dodgeLeft > 0 ? `${(dodgeLeft / 1000).toFixed(1)}s` : 'READY';
   cdDodge.style.color = dodgeLeft > 0 ? '#ffd36a' : '#48bb78';
 
-  nameSkill.textContent = w.skill ? w.skill.name : 'スキル';
+  // Eスキル表示
+  const eTrig = isTrig && TRIGGER_SLOTS.skillE ? TRIGGER_LIST[TRIGGER_SLOTS.skillE] : null;
+  nameSkill.textContent = isTrig ? (eTrig ? eTrig.name : '未セット') : (w.skill ? w.skill.name : 'スキル');
   const skillLeft = Math.max(0, player.nextSkillTime - now);
   cdSkill.textContent = skillLeft > 0 ? `${(skillLeft / 1000).toFixed(1)}s` : 'READY';
   cdSkill.style.color = skillLeft > 0 ? '#ffd36a' : '#48bb78';
 
-  // スペルブック装備時のみ1・2・3スロットをHUDに表示
+  // Qスキル表示（#slot-q のアイコンとCD）
+  const qIcon = document.querySelector('#slot-q .slot-icon');
+  const cdQ = document.getElementById('cd-q');
+  if (isTrig) {
+    const qTrig = TRIGGER_SLOTS.skillQ ? TRIGGER_LIST[TRIGGER_SLOTS.skillQ] : null;
+    if (qIcon) qIcon.textContent = qTrig ? qTrig.name : '未セット';
+    const qLeft = Math.max(0, player.nextQTime - now);
+    if (cdQ) {
+      cdQ.textContent = qLeft > 0 ? `${(qLeft / 1000).toFixed(1)}s` : 'READY';
+      cdQ.style.color = qLeft > 0 ? '#ffd36a' : '#48bb78';
+    }
+  } else {
+    if (qIcon) qIcon.textContent = '衝撃波';
+    if (cdQ) {
+      const qLeft = Math.max(0, player.nextQTime - now);
+      cdQ.textContent = qLeft > 0 ? `${(qLeft / 1000).toFixed(1)}s` : 'READY';
+      cdQ.style.color = qLeft > 0 ? '#ffd36a' : '#48bb78';
+    }
+  }
+
+  // スペルブック または トリガーホルダー装備時に1・2・3スロットをHUD表示
   const sbContainer = document.getElementById('spellbook-hud-slots');
   if (sbContainer) {
-    if (w.type === 'spellbook') {
+    if (w.type === 'spellbook' || isTrig) {
       sbContainer.classList.remove('hidden');
+      const optKeys = ['opt1', 'opt2', 'opt3'];
       for (let i = 0; i < 3; i++) {
-        const sl = SPELLBOOK_SLOTS[i];
+        const sl = isTrig
+          ? (TRIGGER_SLOTS[optKeys[i]] ? { skillName: TRIGGER_LIST[TRIGGER_SLOTS[optKeys[i]]].name } : null)
+          : SPELLBOOK_SLOTS[i];
         document.getElementById(`sb-name-${i}`).textContent = sl ? sl.skillName : '未登録';
         const cdEl = document.getElementById(`sb-cd-${i}`);
         if (!sl) {
@@ -313,6 +342,17 @@ function updateHud(now) {
       }
     } else {
       sbContainer.classList.add('hidden');
+    }
+  }
+
+  // Z(EXS)スロット名表示
+  const exsIcon = document.querySelector('#slot-exs .slot-icon');
+  if (exsIcon) {
+    if (isTrig) {
+      const zTrig = TRIGGER_SLOTS.exs ? TRIGGER_LIST[TRIGGER_SLOTS.exs] : null;
+      exsIcon.textContent = zTrig ? zTrig.name : 'EXS';
+    } else {
+      exsIcon.textContent = 'ExS';
     }
   }
 
