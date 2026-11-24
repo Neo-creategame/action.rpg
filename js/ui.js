@@ -1,13 +1,13 @@
 import {
   POTION_DEF, TOWN_INN_COST, SHOP, SMITH, ARMOR_TYPES, SLOT_KEYS,
-  EXS_LIST, isLegendWeapon, isRestrictedLegend, expNeed
+  EXS_LIST, TRIGGER_LIST, isLegendWeapon, isRestrictedLegend, expNeed
 } from './data.js';
 import {
   state, SAVE, PLAYER, POTIONS, EQUIPPED, ARTIFACTS, BACKPACK, STORAGE,
   unlockedArtifactSlots, equippedArtifacts, activeSynergies, maxHp, atkTotal,
   armorStats, plus, armorLabel, addToPack, spendGold, saveGame,
   rollWeapon, rollArmor, randomSlot, rollArtifact, rollLegendArtifact, createPotion,
-  SPELLBOOK_SLOTS, STORAGE_MAX,
+  SPELLBOOK_SLOTS, STORAGE_MAX, TRIGGER_SLOTS,
 } from './save.js';
 
 export class UIManager {
@@ -96,6 +96,10 @@ export class UIManager {
 
   // ---- ポーション使用 ----
   usePotionKind(kind) {
+    if (state.weapon?.type === 'trigger_holder') {
+      this.onToast('⚠️ トリオン体状態のためポーションは使用不可！');
+      return;
+    }
     const def = POTION_DEF[kind];
     if (!def) return;
 
@@ -154,6 +158,7 @@ export class UIManager {
         gacha: '🎰 異界の召喚ガチャ',
         exs: '⚡ ExS（終結スキル）変更',
         magic: '📖 魔導台（スペルブック編集）',
+        trigger: '💠 トリガー開発室（カスタムトリガー）',
       };
       this.modalTitle.textContent = titles[this.townTab] || '🏰 始まりの町';
       this.renderTownScreen();
@@ -390,6 +395,7 @@ export class UIManager {
     else if (this.townTab === 'gacha') contentHtml = this.renderGachaTab();
     else if (this.townTab === 'exs') contentHtml = this.renderExsTab();
     else if (this.townTab === 'magic') contentHtml = this.renderMagicTab();
+    else if (this.townTab === 'trigger') contentHtml = this.renderTriggerTab();
 
     this.modalBody.innerHTML = `
       <div class="town-header" style="justify-content: flex-end;">
@@ -497,12 +503,53 @@ export class UIManager {
 
   renderGachaTab() {
     return `
-      <div class="ui-card center-card">
-        <h3>🎰 異界の召喚ガチャ</h3>
-        <p>Legend武器（無尾・アポカリプス・アストラル・クロノス・インフェルノ）や専用モチーフ遺物、ExSスキルが出現！</p>
-        <div style="display:flex; gap:12px; justify-content:center; margin-top:14px;">
-          <button class="act-btn primary" data-town="gacha-1">1回召喚 (1,000G)</button>
-          <button class="act-btn primary" data-town="gacha-5">5連召喚 (4,500G)</button>
+      <div class="ui-card">
+        <h3>🎰 異界の召喚ガチャ（3種の召喚台）</h3>
+        <p class="muted" style="margin-bottom:12px;">
+          目的に合わせて3つの召喚ガチャから選択してください（5連召喚は500Gお得）。
+        </p>
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
+          <!-- ① 武器ガチャ -->
+          <div style="background:#131720; border:1px solid #ffd36a; border-radius:8px; padding:12px; display:flex; flex-direction:column; justify-content:space-between; text-align:center;">
+            <div>
+              <div style="font-size:15px; font-weight:bold; color:#ffd36a; margin-bottom:6px;">⚔️ 武器召喚</div>
+              <p style="font-size:11px; color:#cbd5e0; line-height:1.5;">
+                Legend武器（無尾・アポカリプス・アストラル・クロノス・インフェルノ）やExSスキルが出現！
+              </p>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:12px;">
+              <button class="act-btn primary" data-town="gacha" data-pool="weapon" data-count="1">1回召喚 (1,000G)</button>
+              <button class="act-btn primary" data-town="gacha" data-pool="weapon" data-count="5">5連召喚 (4,500G)</button>
+            </div>
+          </div>
+
+          <!-- ② モチーフ遺物ガチャ -->
+          <div style="background:#131720; border:1px solid #b15cff; border-radius:8px; padding:12px; display:flex; flex-direction:column; justify-content:space-between; text-align:center;">
+            <div>
+              <div style="font-size:15px; font-weight:bold; color:#d6bcfa; margin-bottom:6px;">🔮 モチーフ遺物召喚</div>
+              <p style="font-size:11px; color:#cbd5e0; line-height:1.5;">
+                Legend武器を覚醒させる専用モチーフ遺物（蒼焔の狐面・終末の黙示録など）や各種遺物が出現！
+              </p>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:12px;">
+              <button class="act-btn primary" data-town="gacha" data-pool="motif" data-count="1">1回召喚 (1,000G)</button>
+              <button class="act-btn primary" data-town="gacha" data-pool="motif" data-count="5">5連召喚 (4,500G)</button>
+            </div>
+          </div>
+
+          <!-- ③ トリガーガチャ -->
+          <div style="background:#131720; border:1px solid #00ffff; border-radius:8px; padding:12px; display:flex; flex-direction:column; justify-content:space-between; text-align:center;">
+            <div>
+              <div style="font-size:15px; font-weight:bold; color:#00ffff; margin-bottom:6px;">💠 トリガー召喚</div>
+              <p style="font-size:11px; color:#cbd5e0; line-height:1.5;">
+                全14種のトリガー（弧月・アステロイド・アイビス・フルアタック等）が出現！重複でLvUP＆威力強化！
+              </p>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:12px;">
+              <button class="act-btn primary" data-town="gacha" data-pool="trigger" data-count="1">1回召喚 (1,000G)</button>
+              <button class="act-btn primary" data-town="gacha" data-pool="trigger" data-count="5">5連召喚 (4,500G)</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -618,6 +665,98 @@ export class UIManager {
     `;
   }
 
+  renderTriggerTab() {
+    const slotDefs = [
+      { key: 'normal', label: '左クリック (通常攻撃)', accept: 'normal' },
+      { key: 'skillE', label: 'E キー (メインスキル)', accept: 'skill' },
+      { key: 'skillQ', label: 'Q / 右クリック (サブスキル)', accept: 'skill' },
+      { key: 'opt1',   label: '1 キー (オプショナル1)', accept: 'skill' },
+      { key: 'opt2',   label: '2 キー (オプショナル2)', accept: 'skill' },
+      { key: 'opt3',   label: '3 キー (オプショナル3)', accept: 'skill' },
+      { key: 'exs',    label: 'Z キー (EXS / 必殺)', accept: 'exs' }
+    ];
+
+    const ownedIds = Object.keys(state.ownedTriggers || {});
+    if (!this.selectedTriggerId && ownedIds.length > 0) {
+      this.selectedTriggerId = ownedIds[0];
+    }
+    const selTrig = TRIGGER_LIST[this.selectedTriggerId];
+    const selLv = selTrig ? (state.ownedTriggers[selTrig.id] || 1) : 1;
+
+    return `
+      <div class="ui-grid-2">
+        <!-- 左カラム：トリガーホルダー 7スロット構成 -->
+        <div class="ui-card">
+          <h3>💠 トリガーホルダー構成（重複セット可）</h3>
+          <p class="muted" style="margin-bottom:8px;">
+            装備中はHPが「TRION」となり、毎秒0.5%自然回復／回復アイテム不可。
+          </p>
+          <div class="shop-list">
+            ${slotDefs.map((sd) => {
+              const eqId = TRIGGER_SLOTS[sd.key];
+              const tr = eqId ? TRIGGER_LIST[eqId] : null;
+              const lv = tr ? (state.ownedTriggers[tr.id] || 1) : 0;
+              return `
+                <div class="shop-row">
+                  <div>
+                    <div style="font-size:11px; color:#a0aec0;">${sd.label}</div>
+                    <div style="font-size:13px; color:${tr ? '#00ffff' : '#718096'}; font-weight:bold;">
+                      ${tr ? `${tr.name} Lv.${lv}` : '未セット'}
+                    </div>
+                  </div>
+                  ${tr ? `<button class="mini-btn danger" data-town="tr-clear" data-slot="${sd.key}">解除</button>` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- 右カラム：開発室トリガー倉庫 -->
+        <div class="ui-card">
+          <h3>🗄️ 開発室トリガー倉庫 (${ownedIds.length} / ${Object.keys(TRIGGER_LIST).length}種)</h3>
+          <div class="pack-grid" style="grid-template-columns: repeat(3, 1fr);">
+            ${Object.values(TRIGGER_LIST).map((tr) => {
+              const lv = state.ownedTriggers[tr.id] || 0;
+              if (lv <= 0) {
+                return `<div class="pack-cell empty" style="opacity:0.4;">未所持<br><small>${tr.name}</small></div>`;
+              }
+              const sel = this.selectedTriggerId === tr.id ? 'selected' : '';
+              const badge = tr.slotType === 'normal' ? '通常' : tr.slotType === 'exs' ? 'EXS' : 'スキル';
+              return `
+                <div class="pack-cell ${sel}" data-town="tr-select" data-tid="${tr.id}">
+                  <b>${tr.name}</b>
+                  <small style="color:#ffd36a;">Lv.${lv} [${badge}]</small>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <div class="detail-panel" style="margin-top:10px;">
+            ${!selTrig ? `<div class="muted">所持トリガーを選択してください</div>` : `
+              <div class="detail-text">
+                <b>${selTrig.name} Lv.${selLv}</b>（威力補正: <b>${100 + (selLv - 1) * 15}%</b>）<br>
+                <span style="font-size:11px; color:#cbd5e0;">${selTrig.desc}</span>
+              </div>
+              <div class="detail-actions">
+                ${selTrig.slotType === 'normal' ? `
+                  <button class="act-btn primary" data-town="tr-set" data-slot="normal">左クリック(通常)にセット</button>
+                ` : selTrig.slotType === 'exs' ? `
+                  <button class="act-btn primary" data-town="tr-set" data-slot="exs">Zキー(EXS)にセット</button>
+                ` : `
+                  <button class="mini-btn primary" data-town="tr-set" data-slot="skillE">Eにセット</button>
+                  <button class="mini-btn primary" data-town="tr-set" data-slot="skillQ">Q/右にセット</button>
+                  <button class="mini-btn primary" data-town="tr-set" data-slot="opt1">1にセット</button>
+                  <button class="mini-btn primary" data-town="tr-set" data-slot="opt2">2にセット</button>
+                  <button class="mini-btn primary" data-town="tr-set" data-slot="opt3">3にセット</button>
+                `}
+              </div>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   bindTownEvents() {
     this.modalBody.querySelectorAll('[data-town]').forEach((el) => {
       el.addEventListener('click', () => {
@@ -669,6 +808,19 @@ export class UIManager {
             }
             this.onToast(`✨ ${it.name || it.label} が +${it.lv} に強化された！`);
           }
+        } else if (act === 'tr-select') {
+          this.selectedTriggerId = el.dataset.tid;
+        } else if (act === 'tr-set') {
+          const slotKey = el.dataset.slot;
+          const tr = TRIGGER_LIST[this.selectedTriggerId];
+          if (tr) {
+            TRIGGER_SLOTS[slotKey] = tr.id;
+            this.onToast(`💠 【${tr.name}】をセットしました！`);
+          }
+        } else if (act === 'tr-clear') {
+          const slotKey = el.dataset.slot;
+          TRIGGER_SLOTS[slotKey] = null;
+          this.onToast('スロットを解除しました');
         } else if (act === 'take-storage') {
           const idx = Number(el.dataset.idx);
           const it = STORAGE[idx];
@@ -678,11 +830,12 @@ export class UIManager {
           } else {
             this.onToast('バッグがいっぱいです');
           }
-        } else if (act === 'gacha-1' || act === 'gacha-5') {
-          const count = act === 'gacha-5' ? 5 : 1;
-          const cost = act === 'gacha-5' ? 4500 : 1000;
+        } else if (act === 'gacha') {
+          const pool = el.dataset.pool;
+          const count = Number(el.dataset.count);
+          const cost = count === 5 ? 4500 : 1000;
           if (!spendGold(cost)) return this.onToast('ゴールド不足です');
-          this.runGacha(count, floor);
+          this.runGacha(pool, count, floor);
         } else if (act === 'equip-exs') {
           state.equippedExsId = el.dataset.id;
           this.onToast(`⚡ ExS【${EXS_LIST[state.equippedExsId].name}】を装備！`);
@@ -766,34 +919,72 @@ export class UIManager {
     });
   }
 
-  runGacha(count, floor) {
+  runGacha(pool, count, floor) {
     const results = [];
+    const triggerKeys = Object.keys(TRIGGER_LIST);
+
     for (let i = 0; i < count; i++) {
       const r = Math.random();
-      if (r < 0.12) {
-        const legs = ['mubi', 'apocalypse', 'astral_orb', 'chronos_bow', 'inferno_scythe'];
-        const w = rollWeapon(legs[Math.floor(Math.random() * legs.length)], floor);
-        addToPack(w);
-        results.push(`★Legend武器【${w.name}】`);
-      } else if (r < 0.25) {
-        const motifs = ['motif_mubi', 'motif_apo', 'motif_astral', 'motif_chronos'];
-        const art = rollLegendArtifact(motifs[Math.floor(Math.random() * motifs.length)]);
-        if (art) { addToPack(art); results.push(`★モチーフ遺物【${art.name}】`); }
-      } else if (r < 0.40) {
-        const exsKeys = Object.keys(EXS_LIST);
-        const pick = exsKeys[Math.floor(Math.random() * exsKeys.length)];
-        state.ownedExs[pick] = 1;
-        results.push(`⚡ExS【${EXS_LIST[pick].name}】`);
-      } else if (r < 0.70) {
-        const art = rollArtifact();
-        addToPack(art);
-        results.push(`🔮遺物【${art.name}】`);
-      } else {
-        const pot = createPotion('full', 1);
-        addToPack(pot);
-        results.push('🧪全回復ポーション');
+
+      if (pool === 'weapon') {
+        // ① 武器ガチャ
+        if (r < 0.22) {
+          const legs = ['mubi', 'apocalypse', 'astral_orb', 'chronos_bow', 'inferno_scythe'];
+          const w = rollWeapon(legs[Math.floor(Math.random() * legs.length)], floor);
+          if (addToPack(w)) results.push(`★Legend武器【${w.name}】`);
+          else results.push(`★Legend武器【${w.name}】(バッグ満杯)`);
+        } else if (r < 0.45) {
+          const exsKeys = Object.keys(EXS_LIST);
+          const pick = exsKeys[Math.floor(Math.random() * exsKeys.length)];
+          state.ownedExs[pick] = 1;
+          results.push(`⚡ExS【${EXS_LIST[pick].name}】`);
+        } else if (r < 0.75) {
+          const normals = ['sword', 'dual', 'bow', 'greatsword', 'spear', 'spellbook'];
+          const w = rollWeapon(normals[Math.floor(Math.random() * normals.length)], floor);
+          if (addToPack(w)) results.push(`⚔️武器【${w.name}】`);
+          else results.push(`⚔️武器【${w.name}】(バッグ満杯)`);
+        } else {
+          const pot = createPotion('full', 1);
+          addToPack(pot);
+          results.push('🧪全回復ポーション');
+        }
+      } else if (pool === 'motif') {
+        // ② モチーフ遺物ガチャ
+        if (r < 0.25) {
+          const motifs = ['motif_mubi', 'motif_apo', 'motif_astral', 'motif_chronos'];
+          const art = rollLegendArtifact(motifs[Math.floor(Math.random() * motifs.length)]);
+          if (art && addToPack(art)) results.push(`★モチーフ遺物【${art.name}】`);
+          else if (art) results.push(`★モチーフ遺物【${art.name}】(バッグ満杯)`);
+        } else if (r < 0.75) {
+          const art = rollArtifact();
+          if (addToPack(art)) results.push(`🔮遺物【${art.name}】`);
+          else results.push(`🔮遺物【${art.name}】(バッグ満杯)`);
+        } else {
+          const pot = createPotion('full', 1);
+          addToPack(pot);
+          results.push('🧪全回復ポーション');
+        }
+      } else if (pool === 'trigger') {
+        // ③ トリガーガチャ（開発室倉庫へ直接登録＆重複でLvUP）
+        // レア枠（アイビス・フルアタック）は少し低め、その他トリガーは均等排出
+        const rareTriggers = ['ibis', 'full_attack'];
+        const normalTriggers = triggerKeys.filter((k) => !rareTriggers.includes(k));
+        const pickId = r < 0.15
+          ? rareTriggers[Math.floor(Math.random() * rareTriggers.length)]
+          : normalTriggers[Math.floor(Math.random() * normalTriggers.length)];
+
+        const trDef = TRIGGER_LIST[pickId];
+        const prevLv = state.ownedTriggers[pickId] || 0;
+        state.ownedTriggers[pickId] = prevLv + 1;
+
+        if (prevLv === 0) {
+          results.push(`💠新規【${trDef.name}】`);
+        } else {
+          results.push(`💠【${trDef.name}】Lv.${prevLv + 1}に強化！`);
+        }
       }
     }
+
     this.onToast(`🎰 召喚結果: ${results.join(' / ')}`);
   }
   // ==========================================
@@ -943,6 +1134,13 @@ export class UIManager {
     const pPos = this.player.root.position;
     const gx = Math.round(pPos.x / 4.5);
     const gz = Math.round(pPos.z / 4.5);
+    if (this.player.radarUntil > performance.now()) {
+      for (let rx = -22; rx <= 22; rx++) {
+        for (let rz = -22; rz <= 22; rz++) {
+          this.exploredSet.add(`${rx},${rz}`);
+        }
+      }
+    }
     for (let dx = -3; dx <= 3; dx++) {
       for (let dz = -3; dz <= 3; dz++) {
         this.exploredSet.add(`${gx + dx},${gz + dz}`);
