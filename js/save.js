@@ -26,6 +26,24 @@ export const ARTIFACTS = [null, null, null];
 export const BACKPACK = Array(PACK_COLS * PACK_ROWS).fill(null);
 export const STORAGE = Array(PACK_COLS * PACK_ROWS).fill(null);
 export const SPELLBOOK_SLOTS = [null, null, null];
+export const TRIGGER_SLOTS = {
+  normal: 'kogetsu', // 左クリック（初期は弧月）
+  skillE: null,      // Eキー
+  skillQ: null,      // Qキー
+  opt1: null,        // 1キー
+  opt2: null,        // 2キー
+  opt3: null,        // 3キー
+  exs: 'ibis'        // Zキー（EXS枠）
+};
+
+// 動的に切り替わる装備・ゲージ状態
+export const state = {
+  weapon: null,
+  exsGauge: 0,
+  equippedExsId: 'giga_breaker',
+  ownedExs: { giga_breaker: 1 },
+  ownedTriggers: { kogetsu: 1 } // 開発室倉庫の所持トリガーとレベル（id: lv）
+};
 
 // 動的に切り替わる装備・ゲージ状態
 export const state = {
