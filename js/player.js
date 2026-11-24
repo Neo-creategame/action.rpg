@@ -1214,18 +1214,70 @@ export class Player {
         this.astralBits.forEach((b) => {
           const ang = t + b.angleOffset;
           b.mesh.position.set(
-            this.root.position.x + Math.cos(ang) * 1.45,
-            this.root.position.y + 1.5 + Math.sin(t * 2 + b.angleOffset) * 0.15,
-            this.root.position.z + Math.sin(ang) * 1.45
+            this.root.position.x + Math.cos(ang) * 1.55,
+            this.root.position.y + 1.55 + Math.sin(t * 2.5 + b.angleOffset) * 0.16,
+            this.root.position.z + Math.sin(ang) * 1.55
           );
-          b.mesh.rotation.y += dt * 3;
+          // コアと2重リングをそれぞれ異なる軸で回転
+          b.core.rotation.y += dt * 4.5;
+          b.ring.rotation.z -= dt * 3.0;
+          b.innerRing.rotation.x += dt * 3.8;
+          b.innerRing.rotation.y += dt * 2.5;
         });
 
         this.bitFireTimer += dt;
         if (this.bitFireTimer >= 0.8 && this.enemyManager.enemies.length > 0) {
           this.bitFireTimer = 0;
-          const dmg = Math.round(atkTotal(this.hp) * 0.45);
-          this.fireProjectile(0, dmg, 0x10b981, { homing: true, isBitLaser: true, attackCategory: 'skill' });
+
+          // 射程22m以内の最も近い敵をターゲットにする
+          let nearest = null;
+          let minD = 22.0;
+          for (const e of this.enemyManager.enemies) {
+            const d = e.root.position.distanceTo(this.root.position);
+            if (d < minD) { minD = d; nearest = e; }
+          }
+
+          if (nearest) {
+            const dmg = Math.round(atkTotal(this.hp) * 0.45);
+            const targetPos = nearest.root.position.clone().add(new THREE.Vector3(0, 1.0 * nearest.scale, 0));
+
+            // 展開中の各ビットからターゲットへ細い瞬間レーザーを描画
+            this.astralBits.forEach((b) => {
+              const startPos = b.mesh.position.clone();
+              const diff = targetPos.clone().sub(startPos);
+              const dist = diff.length();
+              if (dist > 0.05) {
+                const mid = startPos.clone().addScaledVector(diff, 0.5);
+                const beamGeo = new THREE.CylinderGeometry(0.05, 0.05, dist, 8);
+                const beamMat = new THREE.MeshBasicMaterial({
+                  color: 0x00ffff,
+                  transparent: true,
+                  opacity: 0.95
+                });
+                const beam = new THREE.Mesh(beamGeo, beamMat);
+                beam.position.copy(mid);
+                beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), diff.normalize());
+                this.scene.add(beam);
+                this.slashEffects.push({ mesh: beam, life: 0.16, maxLife: 0.16 });
+              }
+            });
+
+            // ダメージ＆星力消費・ExSゲージ加算
+            if (!hasSynergy('awake_astral')) {
+              this.starGauge = Math.max(0, this.starGauge - 5);
+            }
+            if (this.timeStopHits.has(nearest)) {
+              this.timeStopHits.set(nearest, this.timeStopHits.get(nearest) + 1);
+            }
+            this.enemyManager.damageEnemy(nearest, dmg, {
+              color: 0x10b981,
+              attackCategory: 'skill',
+              playerPos: this.root.position,
+              playerRef: this
+            });
+            state.exsGauge = Math.min(EXS_GAUGE_MAX, state.exsGauge + 6);
+            this.world.spawnHitSpark(targetPos, 0x00ffff);
+          }
         }
       }
     }
