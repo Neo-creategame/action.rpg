@@ -339,7 +339,10 @@ export function saveGame() {
       spellbookSlots: SPELLBOOK_SLOTS,
       exsGauge: state.exsGauge,
       equippedExsId: state.equippedExsId,
-      ownedExs: { ...state.ownedExs }
+      ownedExs: { ...state.ownedExs },
+      triggerSlots: { ...TRIGGER_SLOTS },
+      ownedTriggers: { ...state.ownedTriggers },
+      triggerHolderDropped: !!SAVE.triggerHolderDropped,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     return true;
@@ -359,6 +362,9 @@ export function loadGame() {
     SAVE.autoSell = !!data.autoSell;
     SAVE.autoDismantle = !!data.autoDismantle;
     SAVE.spellbookDropped = !!data.spellbookDropped;
+    SAVE.triggerHolderDropped = !!data.triggerHolderDropped;
+    if (data.triggerSlots) Object.assign(TRIGGER_SLOTS, data.triggerSlots);
+    if (data.ownedTriggers) Object.assign(state.ownedTriggers, data.ownedTriggers);
     Object.assign(PLAYER, data.player);
     Object.assign(POTIONS, data.potions);
     
