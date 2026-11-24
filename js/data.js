@@ -58,6 +58,10 @@ export const WEAPONS = {
   inferno_scythe: {
     name: 'インフェルノ・サイズ', baseAtk: 300, base: 350, cd: 360, range: 5.0, speedMult: 1.15,
     isLegend: true, skill: { name: 'ソウル・ハーベスト', cd: 4500 }
+  },
+  trigger_holder: {
+    name: 'トリガーホルダー', baseAtk: 600, base: 600, cd: 320, range: 4.5, speedMult: 1.15,
+    isLegend: true, skill: { name: 'メイン起動', cd: 3000 }
   }
 };
 
@@ -66,7 +70,8 @@ export const LEGEND_BASE_ATK = {
   astral_orb: 500,
   apocalypse: 750,
   chronos_bow: 800,
-  inferno_scythe: 300
+  inferno_scythe: 300,
+  trigger_holder: 600,
 };
 
 export const isLegendWeapon = (w) => !!(w && LEGEND_BASE_ATK[w.type]);
@@ -222,3 +227,82 @@ export const ARTIFACT_SYNERGIES = [
   { id: 'awake_astral',      name: '✦覚醒【星界の支配者】',     keys: ['motif_astral'],  reqWeapon: 'astral_orb',  desc: 'Qスキル【ビット】のゲージ消費がゼロになり、弾数が3発に増加' },
   { id: 'awake_chronos',     name: '✦覚醒【永遠の刻限】',       keys: ['motif_chronos'], reqWeapon: 'chronos_bow', desc: '刻限ゲージ獲得量+50%＆距離補正の最大倍率が1.6倍→2.5倍に強化' }
 ];
+
+// ワールドトリガー再現：開発室倉庫用トリガー一覧（重複でLvUP）
+export const TRIGGER_LIST = {
+  // --- 通常攻撃枠（normal: 3種類） ---
+  kogetsu: {
+    id: 'kogetsu', slotType: 'normal', name: '弧月',
+    cd: 300, costPct: 0.005,
+    desc: '素早い3段斬撃コンボ（消費トリオン: 0.5% / LvUPで威力+15%）'
+  },
+  asteroid: {
+    id: 'asteroid', slotType: 'normal', name: 'アステロイド',
+    cd: 340, costPct: 0.008,
+    desc: 'トリオン弾を3連射する標準射手トリガー（消費トリオン: 0.8% / LvUPで威力+15%）'
+  },
+  raygust: {
+    id: 'raygust', slotType: 'normal', name: 'レイガスト',
+    cd: 420, costPct: 0.008,
+    desc: '広範囲を薙ぎ払い敵弾をかき消す重厚ブレード（消費トリオン: 0.8% / LvUPで威力+15%）'
+  },
+
+  // --- スキル枠（skill: E / Q / 1 / 2 / 3 に重複セット可） ---
+  viper: {
+    id: 'viper', slotType: 'skill', name: 'バイパー',
+    cd: 3800, costPct: 0.035,
+    desc: '大きく蛇行しながら死角から追尾する変化軌道弾（消費: 3.5%）'
+  },
+  hound: {
+    id: 'hound', slotType: 'skill', name: 'ハウンド',
+    cd: 3500, costPct: 0.035,
+    desc: '敵を執拗に追尾する誘導弾を一斉発射（消費: 3.5%）'
+  },
+  meteora: {
+    id: 'meteora', slotType: 'skill', name: 'メテオラ',
+    cd: 4800, costPct: 0.05,
+    desc: '着弾地点で大爆発を起こし周囲を吹き飛ばす炸裂弾（消費: 5.0%）'
+  },
+  senku: {
+    id: 'senku', slotType: 'skill', name: '旋空弧月',
+    cd: 4200, costPct: 0.04,
+    desc: '刀身を伸ばし前方の敵と障害物を薙ぎ払う長距離貫通斬撃波（消費: 4.0%）'
+  },
+  grasshopper: {
+    id: 'grasshopper', slotType: 'skill', name: 'グラスホッパー',
+    cd: 2600, costPct: 0.02,
+    desc: '緑の反発パッドを生成し入力方向（未入力時は上空）へ高速跳躍（消費: 2.0%）'
+  },
+  escudo: {
+    id: 'escudo', slotType: 'skill', name: 'エスクード',
+    cd: 5500, costPct: 0.045,
+    desc: '前方に破壊可能な盾壁を3枚せり上げ敵の突進やレーザーを遮蔽（消費: 4.5%）'
+  },
+  shield: {
+    id: 'shield', slotType: 'skill', name: 'シールド',
+    cd: 5000, costPct: 0.03,
+    desc: '3秒間全身にトリオン障壁を展開し被ダメ大幅軽減（消費: 3.0% / LvUPで軽減率UP）'
+  },
+  teleporter: {
+    id: 'teleporter', slotType: 'skill', name: 'テレポーター',
+    cd: 3200, costPct: 0.025,
+    desc: '視線・入力方向へ障害物をすり抜けて瞬間移動（消費: 2.5%）'
+  },
+  radar: {
+    id: 'radar', slotType: 'skill', name: 'レーダー',
+    cd: 8000, costPct: 0.03,
+    desc: '8秒間攻撃力UP＆全フロアの敵・宝箱・罠をミニマップに完全探知（消費: 3.0%）'
+  },
+
+  // --- EXS / 必殺枠（exs: ZキーでExSゲージ100%消費） ---
+  ibis: {
+    id: 'ibis', slotType: 'exs', name: 'アイビス',
+    cd: 1000, costPct: 0.08,
+    desc: '【EXS】超威力・壁＆敵貫通の狙撃砲撃＋着弾大爆発（ExS100% + トリオン8%）'
+  },
+  full_attack: {
+    id: 'full_attack', slotType: 'exs', name: 'フルアタック',
+    cd: 1000, costPct: 0.10,
+    desc: '【EXS】E/Q/1/2/3にセット中の全スキルトリガーをノータイム一斉同時発動（ExS100% + トリオン10%）'
+  }
+};
