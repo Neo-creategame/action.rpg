@@ -233,76 +233,76 @@ export const TRIGGER_LIST = {
   // --- 通常攻撃枠（normal: 3種類） ---
   kogetsu: {
     id: 'kogetsu', slotType: 'normal', name: '弧月',
-    cd: 300, costPct: 0.005,
-    desc: '素早い3段斬撃コンボ（消費トリオン: 0.5% / LvUPで威力+15%）'
+    cd: 300, cost: 0,
+    desc: '素早い3段斬撃コンボ（消費トリオン: 0 / LvUPで威力+15%）'
   },
   asteroid: {
     id: 'asteroid', slotType: 'normal', name: 'アステロイド',
-    cd: 340, costPct: 0.008,
-    desc: 'トリオン弾を3連射する標準射手トリガー（消費トリオン: 0.8% / LvUPで威力+15%）'
+    cd: 340, cost: 10,
+    desc: 'トリオン弾を3連射する標準射手トリガー（消費トリオン: 10 / LvUPで威力+15%）'
   },
   raygust: {
     id: 'raygust', slotType: 'normal', name: 'レイガスト',
-    cd: 420, costPct: 0.008,
-    desc: '広範囲を薙ぎ払い敵弾をかき消す重厚ブレード（消費トリオン: 0.8% / LvUPで威力+15%）'
+    cd: 420, cost: 5,
+    desc: '広範囲を薙ぎ払い敵弾をかき消す重厚ブレード（消費トリオン: 5 / LvUPで威力+15%）'
   },
 
   // --- スキル枠（skill: E / Q / 1 / 2 / 3 に重複セット可） ---
   viper: {
     id: 'viper', slotType: 'skill', name: 'バイパー',
-    cd: 3800, costPct: 0.035,
-    desc: '大きく蛇行しながら死角から追尾する変化軌道弾（消費: 3.5%）'
+    cd: 3800, cost: 50,
+    desc: '大きく蛇行しながら死角から追尾する変化軌道弾（消費: 50）'
   },
   hound: {
     id: 'hound', slotType: 'skill', name: 'ハウンド',
-    cd: 3500, costPct: 0.035,
-    desc: '敵を執拗に追尾する誘導弾を一斉発射（消費: 3.5%）'
+    cd: 3500, cost: 75,
+    desc: '敵を執拗に追尾する誘導弾を一斉発射（消費: 75）'
   },
   meteora: {
     id: 'meteora', slotType: 'skill', name: 'メテオラ',
-    cd: 4800, costPct: 0.05,
-    desc: '着弾地点で大爆発を起こし周囲を吹き飛ばす炸裂弾（消費: 5.0%）'
+    cd: 4800, cost: 100,
+    desc: '着弾地点で大爆発を起こし周囲を吹き飛ばす炸裂弾（消費: 100）'
   },
   senku: {
     id: 'senku', slotType: 'skill', name: '旋空弧月',
-    cd: 4200, costPct: 0.04,
-    desc: '刀身を伸ばし前方の敵と障害物を薙ぎ払う長距離貫通斬撃波（消費: 4.0%）'
+    cd: 4200, cost: 100,
+    desc: '刀身を伸ばし前方の敵と障害物を薙ぎ払う長距離貫通斬撃波（消費: 100）'
   },
   grasshopper: {
     id: 'grasshopper', slotType: 'skill', name: 'グラスホッパー',
-    cd: 2600, costPct: 0.02,
-    desc: '緑の反発パッドを生成し入力方向（未入力時は上空）へ高速跳躍（消費: 2.0%）'
+    cd: 1500, costPct: 10,
+    desc: '緑の反発パッドを生成し入力方向（未入力時は上空）へ高速跳躍（消費: 10）'
   },
   escudo: {
     id: 'escudo', slotType: 'skill', name: 'エスクード',
-    cd: 5500, costPct: 0.045,
-    desc: '前方に破壊可能な盾壁を3枚せり上げ敵の突進やレーザーを遮蔽（消費: 4.5%）'
+    cd: 5500, cost: 75,
+    desc: '前方に破壊可能な盾壁を3枚せり上げ敵の突進やレーザーを遮蔽（消費: 75）'
   },
   shield: {
     id: 'shield', slotType: 'skill', name: 'シールド',
-    cd: 5000, costPct: 0.03,
-    desc: '3秒間全身にトリオン障壁を展開し被ダメ大幅軽減（消費: 3.0% / LvUPで軽減率UP）'
+    cd: 5000, cost: 10,
+    desc: '3秒間全身にトリオン障壁を展開し被ダメ大幅軽減（消費: 10 / LvUPで軽減率UP）'
   },
   teleporter: {
     id: 'teleporter', slotType: 'skill', name: 'テレポーター',
-    cd: 3200, costPct: 0.025,
-    desc: '視線・入力方向へ障害物をすり抜けて瞬間移動（消費: 2.5%）'
+    cd: 3200, cost: 150,
+    desc: '視線・入力方向へ障害物をすり抜けて瞬間移動（消費: 150）'
   },
   radar: {
     id: 'radar', slotType: 'skill', name: 'レーダー',
-    cd: 8000, costPct: 0.03,
-    desc: '8秒間攻撃力UP＆全フロアの敵・宝箱・罠をミニマップに完全探知（消費: 3.0%）'
+    cd: 8000, cost: 5,
+    desc: '8秒間攻撃力UP＆全フロアの敵・宝箱・罠をミニマップに完全探知（消費: 5）'
   },
 
   // --- EXS / 必殺枠（exs: ZキーでExSゲージ100%消費） ---
   ibis: {
     id: 'ibis', slotType: 'exs', name: 'アイビス',
-    cd: 1000, costPct: 0.08,
-    desc: '【EXS】超威力・壁＆敵貫通の狙撃砲撃＋着弾大爆発（ExS100% + トリオン8%）'
+    cd: 1000, cost: 150,
+    desc: '【EXS】超威力・壁＆敵貫通の狙撃砲撃＋着弾大爆発（ExS100% + トリオン150）'
   },
   full_attack: {
     id: 'full_attack', slotType: 'exs', name: 'フルアタック',
-    cd: 1000, costPct: 0.10,
-    desc: '【EXS】E/Q/1/2/3にセット中の全スキルトリガーをノータイム一斉同時発動（ExS100% + トリオン10%）'
+    cd: 1000, cost: 300,
+    desc: '【EXS】E/Q/1/2/3にセット中の全スキルトリガーをノータイム一斉同時発動（ExS100% + トリオン300）'
   }
 };
