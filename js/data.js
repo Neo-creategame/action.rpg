@@ -270,7 +270,7 @@ export const TRIGGER_LIST = {
   },
   grasshopper: {
     id: 'grasshopper', slotType: 'skill', name: 'グラスホッパー',
-    cd: 1500, costPct: 10,
+    cd: 1500, cost: 10,
     desc: '緑の反発パッドを生成し入力方向（未入力時は上空）へ高速跳躍（消費: 10）'
   },
   escudo: {
