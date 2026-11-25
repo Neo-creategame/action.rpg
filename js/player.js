@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import {
-  DURABILITY, RANGED_WEAPON_TYPES, isRestrictedLegend, EXS_LIST, EXS_GAUGE_MAX, DEATH
+  DURABILITY, RANGED_WEAPON_TYPES, isRestrictedLegend, EXS_LIST, EXS_GAUGE_MAX, DEATH, TRIGGER_LIST
 } from './data.js';
 import {
   state, EQUIPPED, maxHp, atkTotal, takeDamage, wear, wearArmor,
-  hasSynergy, artifactStat, saveGame, SPELLBOOK_SLOTS
+  hasSynergy, artifactStat, saveGame, SPELLBOOK_SLOTS, TRIGGER_SLOTS,
 } from './save.js';
 
 const PLAYER_HEIGHT = 2.2;
@@ -50,6 +50,14 @@ export class Player {
     this.skillObjects = [];
     this.exsRegenAcc = 0;
 
+    // ワールドトリガー用状態管理
+    this.trionRegenAcc = 0;
+    this.trionShieldUntil = 0;
+    this.trionShieldReduce = 0;
+    this.radarUntil = 0;
+    this.radarAtkMult = 1.0;
+    this.shieldBubbleMesh = null;
+
     this.root = new THREE.Group();
     this.root.position.set(0, 0, 6);
     this.scene.add(this.root);
@@ -62,6 +70,7 @@ export class Player {
     this.camDist = 6.8;
     this.shakeTime = 0;
     this.shakeIntensity = 0;
+
 
     this.comboStep = 0;
     this.comboResetTimer = 0;
@@ -148,6 +157,25 @@ export class Player {
     this.bladeMesh.scale.set(isWide ? 1.8 : 1.0, isLong ? 1.45 : 1.0, isWide ? 1.5 : 1.0);
     this.offhandMesh.visible = (w.type === 'dual');
   }
+  isTriggerMode() {
+    return state.weapon?.type === 'trigger_holder';
+  }
+
+  getTriggerPowerMult(id) {
+    const lv = (state.ownedTriggers && state.ownedTriggers[id]) || 1;
+    const radarBonus = performance.now() < this.radarUntil ? this.radarAtkMult : 1.0;
+    return (1 + (lv - 1) * 0.15) * radarBonus;
+  }
+
+  consumeTrion(costPct) {
+    const cost = Math.max(1, Math.round(maxHp() * costPct));
+    if (this.hp <= cost) {
+      this.onToast('⚠️ トリオン不足（ベイルアウト危険域のため発動不可）');
+      return false;
+    }
+    this.hp -= cost;
+    return true;
+  }
 
   bindInputs() {
     window.addEventListener('keydown', (e) => {
@@ -182,7 +210,10 @@ export class Player {
     window.addEventListener('mousedown', (e) => {
       if (this.isUiOpen() || document.pointerLockElement !== document.body) return;
       if (e.button === 0) this.triggerAttack();
-      if (e.button === 2) this.triggerDodge();
+      if (e.button === 2) {
+        if (this.isTriggerMode()) this.triggerQSkill();
+        else this.triggerDodge();
+      }
     });
 
     window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -261,6 +292,10 @@ export class Player {
   // 1. 通常攻撃（仕様準拠）
   // ==========================================
   triggerAttack() {
+    if (this.isTriggerMode()) {
+      this.executeTriggerNormal(dmg, isThird);
+      return;
+    }
     const now = performance.now();
     const w = state.weapon;
     if (!w || now < this.nextAtkTime || now < this.dodgeUntil) return;
@@ -373,6 +408,10 @@ export class Player {
     const now = performance.now();
     const w = state.weapon;
     if (!w || now < this.nextSkillTime || now < this.dodgeUntil) return;
+    if (this.isTriggerMode()) {
+      this.executeTriggerSlot('skillE', 'nextSkillTime');
+      return;
+    }
 
     const cdCut = Math.min(0.65, (artifactStat('cdPct') + artifactStat('motif_chronos') + (hasSynergy('chronos_overdrive') ? 15 : 0)) / 100);
     this.nextSkillTime = now + Math.round(w.skill.cd * (1 - cdCut));
@@ -384,6 +423,11 @@ export class Player {
 
   // ★追加：スペルブックの1・2・3キー発動（威力50%・CD2倍）
   triggerSpellbookSlot(slotIdx) {
+    if (this.isTriggerMode()) {
+      const optKeys = ['opt1', 'opt2', 'opt3'];
+      this.executeTriggerSlot(optKeys[slotIdx], null, slotIdx);
+      return;
+    }
     const w = state.weapon;
     if (!w || w.type !== 'spellbook') return;
     const slotData = SPELLBOOK_SLOTS[slotIdx];
@@ -478,6 +522,10 @@ export class Player {
     const now = performance.now();
     const w = state.weapon;
     const dmg = atkTotal(this.hp);
+    if (this.isTriggerMode()) {
+      this.executeTriggerSlot('skillQ', 'nextQTime');
+      return;
+    }
 
     if (w.type === 'mubi') {
       // 【蒼焔乱舞】蒼焔80消費。周囲に200%ダメージ×10連撃
@@ -569,6 +617,10 @@ export class Player {
   triggerExS() {
     const w = state.weapon;
     const dmg = atkTotal(this.hp);
+    if (this.isTriggerMode()) {
+      this.executeTriggerExS(dmg);
+      return;
+    }
 
     if (w.type === 'mubi') {
       // 【蒼焔・絶対凍結陣】蒼焔120消費。周囲に300%×8連撃＋3秒凍結（解除時30%破砕追撃）
@@ -667,6 +719,230 @@ export class Player {
       this.addCameraShake(0.4, 0.25);
       this.spawnSlashArc(9.5, 0xffd36a, 2.8);
       this.performMeleeHit(9.5, Math.round(dmg * 10.0), 0xffd36a, true, true, 3000, 0, 'skill');
+    }
+  }
+  // ---- トリガーホルダー：通常攻撃（弧月 / アステロイド / レイガスト） ----
+  executeTriggerNormal(baseDmg, isThird) {
+    const id = TRIGGER_SLOTS.normal || 'kogetsu';
+    const tr = TRIGGER_LIST[id];
+    if (!tr || !this.consumeTrion(tr.costPct)) return;
+
+    const dmg = Math.round(baseDmg * this.getTriggerPowerMult(id));
+    this.nextAtkTime = performance.now() + tr.cd;
+    this.model.rotation.y = this.yaw;
+
+    if (id === 'asteroid') {
+      // アステロイド：3連トリオン弾
+      [-0.08, 0, 0.08].forEach((off, idx) => {
+        setTimeout(() => {
+          this.fireProjectile(off, Math.round(dmg * 0.48), 0x00ffff, { attackCategory: 'ranged' });
+        }, idx * 45);
+      });
+    } else if (id === 'raygust') {
+      // レイガスト（ブレード）：広範囲薙ぎ払い＋正面の敵弾消去
+      this.swingSwordAnimation(this.comboStep);
+      this.spawnSlashArc(5.0, 0x38bdf8, 1.5);
+      this.enemyManager.clearProjectilesInRadius(this.root.position, 4.5);
+      this.performMeleeHit(5.0, Math.round(dmg * 1.15), 0x38bdf8, false, isThird, 0, 1.2, 'melee');
+    } else {
+      // 弧月：素早い3段斬撃
+      this.swingSwordAnimation(this.comboStep);
+      const reach = isThird ? 4.8 : 4.0;
+      this.spawnSlashArc(reach, 0x48bb78, isThird ? 1.4 : 1.0);
+      this.performMeleeHit(reach, Math.round(dmg * (isThird ? 1.3 : 1.0)), 0x48bb78, false, isThird, 0, 0, 'melee');
+    }
+  }
+
+  // ---- トリガーホルダー：スキル枠（E / Q / 1 / 2 / 3）発動 ----
+  executeTriggerSlot(slotKey, timerProp, sbIdx = -1, freeCast = false) {
+    const id = TRIGGER_SLOTS[slotKey];
+    if (!id) {
+      if (!freeCast) this.onToast('スロットにトリガーが未セットです');
+      return;
+    }
+    const tr = TRIGGER_LIST[id];
+    if (!tr) return;
+
+    const now = performance.now();
+    if (!freeCast) {
+      const nextTime = sbIdx >= 0 ? this.nextSbTimes[sbIdx] : this[timerProp];
+      if (now < nextTime) return;
+      if (!this.consumeTrion(tr.costPct)) return;
+
+      const cdCut = Math.min(0.65, (artifactStat('cdPct') + artifactStat('motif_chronos') + (hasSynergy('chronos_overdrive') ? 15 : 0)) / 100);
+      const lv = (state.ownedTriggers && state.ownedTriggers[id]) || 1;
+      const lvCdMult = Math.max(0.65, 1 - (lv - 1) * 0.04);
+      const cdVal = Math.round(tr.cd * (1 - cdCut) * lvCdMult);
+
+      if (sbIdx >= 0) this.nextSbTimes[sbIdx] = now + cdVal;
+      else this[timerProp] = now + cdVal;
+    }
+
+    this.enemyManager.onPlayerSkillUsed(this.root.position);
+    this.runTriggerEffect(id);
+  }
+
+  // ---- 各トリガースキルの具体的3D挙動 ----
+  runTriggerEffect(id) {
+    const now = performance.now();
+    const lv = (state.ownedTriggers && state.ownedTriggers[id]) || 1;
+    const mult = this.getTriggerPowerMult(id);
+    const dmg = Math.round(atkTotal(this.hp) * mult);
+    this.model.rotation.y = this.yaw;
+
+    if (id === 'viper') {
+      // バイパー：左右に大きく蛇行しながら追尾する変化軌道弾（LvUPで弾数増）
+      const count = Math.min(8, 4 + Math.floor(lv / 2));
+      for (let i = 0; i < count; i++) {
+        const side = i % 2 === 0 ? 1 : -1;
+        const spread = (0.35 + i * 0.08) * side;
+        this.fireProjectile(spread, Math.round(dmg * 0.55), 0x00ffff, {
+          homing: true, homingStrength: 0.24, attackCategory: 'skill'
+        });
+      }
+    } else if (id === 'hound') {
+      // ハウンド：高追尾誘導弾の一斉射撃
+      const count = Math.min(9, 5 + Math.floor(lv / 2));
+      for (let i = 0; i < count; i++) {
+        const off = (i - (count - 1) / 2) * 0.14;
+        this.fireProjectile(off, Math.round(dmg * 0.5), 0x63b3ed, {
+          homing: true, homingStrength: 0.28, attackCategory: 'skill'
+        });
+      }
+    } else if (id === 'meteora') {
+      // メテオラ：着弾大爆発＋周囲吹き飛ばし
+      this.fireProjectile(0, Math.round(dmg * 1.4), 0xff4500, {
+        isMeteora: true, blastRadius: 4.5 + Math.min(2.5, lv * 0.25), attackCategory: 'skill'
+      });
+    } else if (id === 'senku') {
+      // 旋空弧月：超長距離貫通斬撃波＋近接薙ぎ払い
+      this.swingSwordAnimation(3);
+      this.spawnSlashArc(7.5, 0x48bb78, 2.2);
+      this.addCameraShake(0.18, 0.14);
+      this.performMeleeHit(7.5, Math.round(dmg * 1.6), 0x48bb78, false, true, 0, 1.5, 'skill');
+      this.fireProjectile(0, Math.round(dmg * 1.35), 0x48bb78, {
+        pierce: true, maxDist: 22, attackCategory: 'skill'
+      });
+    } else if (id === 'grasshopper') {
+      // グラスホッパー：緑の反発パッド生成＋入力方向（無入力時は上空）へ高速跳躍
+      const pad = new THREE.Mesh(
+        new THREE.RingGeometry(0.4, 1.6, 24),
+        new THREE.MeshBasicMaterial({ color: 0x48bb78, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+      );
+      pad.rotation.x = -Math.PI / 2;
+      pad.position.set(this.root.position.x, this.root.position.y + 0.1, this.root.position.z);
+      this.scene.add(pad);
+      this.slashEffects.push({ mesh: pad, life: 0.45, maxLife: 0.45 });
+
+      const moveDir = this.getInputMoveDirection();
+      this.invulnUntil = Math.max(this.invulnUntil, now + 350);
+      if (moveDir.lengthSq() > 0) {
+        this.dodgeDir.copy(moveDir).normalize();
+        this.dodgeUntil = now + 260;
+        this.velocityY = Math.max(this.velocityY, 0.22);
+      } else {
+        this.velocityY = 0.44 + Math.min(0.15, lv * 0.02);
+        this.onGround = false;
+      }
+    } else if (id === 'escudo') {
+      // エスクード：前方に破壊可能な盾壁を3枚せり上げる
+      const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
+      const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).normalize();
+      const baseCenter = this.root.position.clone().addScaledVector(forward, 3.2);
+      const wallHp = Math.round(maxHp() * (0.45 + lv * 0.15));
+
+      [-1.7, 0, 1.7].forEach((offset) => {
+        const pos = baseCenter.clone().addScaledVector(right, offset);
+        if (!this.world.isBlockedForEntity(pos.x, pos.z, 0.6)) {
+          this.world.addDestructibleBlock(pos.x, 0.8, pos.z, 0x00ffff, wallHp);
+          this.world.addDestructibleBlock(pos.x, 2.4, pos.z, 0x00ffff, wallHp);
+        }
+      });
+      this.onToast('🛡️ エスクード展開！');
+    } else if (id === 'shield') {
+      // シールド：3秒間トリオン障壁展開（LvUPで軽減率UP：55%〜最大85%）
+      this.trionShieldUntil = now + 3000 + Math.min(2000, (lv - 1) * 250);
+      this.trionShieldReduce = Math.min(0.85, 0.55 + (lv - 1) * 0.05);
+      if (!this.shieldBubbleMesh) {
+        this.shieldBubbleMesh = new THREE.Mesh(
+          new THREE.IcosahedronGeometry(1.35, 1),
+          new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true, transparent: true, opacity: 0.45 })
+        );
+        this.shieldBubbleMesh.position.y = 1.1;
+        this.root.add(this.shieldBubbleMesh);
+      }
+      this.shieldBubbleMesh.visible = true;
+      this.onToast(`🔷 シールド展開（被ダメ${Math.round(this.trionShieldReduce * 100)}%軽減）`);
+    } else if (id === 'teleporter') {
+      // テレポーター：障害物をすり抜けて瞬間移動
+      const moveDir = this.getInputMoveDirection();
+      const dir = moveDir.lengthSq() > 0
+        ? moveDir
+        : new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
+      const dist = 7.5 + Math.min(5.0, (lv - 1) * 0.8);
+
+      for (let i = 0; i < 3; i++) this.spawnAfterimage();
+      this.invulnUntil = Math.max(this.invulnUntil, now + 350);
+
+      for (let step = dist; step >= 1.0; step -= 0.5) {
+        const tx = this.root.position.x + dir.x * step;
+        const tz = this.root.position.z + dir.z * step;
+        if (!this.isCollidingHorizontal(tx, tz, this.root.position.y)) {
+          this.root.position.set(tx, this.root.position.y, tz);
+          break;
+        }
+      }
+      this.spawnSlashArc(2.5, 0x00ffff, 1.2);
+    } else if (id === 'radar') {
+      // レーダー：8秒間マップ全探知＆攻撃力バフ
+      this.radarUntil = now + 8000 + (lv - 1) * 1000;
+      this.radarAtkMult = 1.15 + Math.min(0.35, (lv - 1) * 0.04);
+      this.onToast(`📡 レーダー起動（全探知＋攻撃力+${Math.round((this.radarAtkMult - 1) * 100)}%）`);
+    }
+  }
+
+  // ---- トリガーホルダー：Zキー（EXS：アイビス / フルアタック） ----
+  executeTriggerExS(baseDmg) {
+    if (state.exsGauge < EXS_GAUGE_MAX) return;
+    const id = TRIGGER_SLOTS.exs || 'ibis';
+    const tr = TRIGGER_LIST[id];
+    if (!tr || !this.consumeTrion(tr.costPct)) return;
+
+    state.exsGauge = 0;
+    const mult = this.getTriggerPowerMult(id);
+    const dmg = Math.round(baseDmg * mult);
+    this.model.rotation.y = this.yaw;
+
+    if (id === 'full_attack') {
+      // フルアタック：E / Q / 1 / 2 / 3 にセット中の全スキルトリガーを同時一斉発動！
+      this.onToast('💥 フルアタック（全トリガー一斉起動）！！');
+      this.addCameraShake(0.45, 0.28);
+      const allKeys = ['skillE', 'skillQ', 'opt1', 'opt2', 'opt3'];
+      let launched = 0;
+      allKeys.forEach((k) => {
+        if (TRIGGER_SLOTS[k]) {
+          this.executeTriggerSlot(k, null, -1, true);
+          launched++;
+        }
+      });
+      if (launched === 0) {
+        // 1つもセットされていない場合のフォールバック一斉射撃
+        this.runTriggerEffect('hound');
+        this.runTriggerEffect('meteora');
+      }
+    } else {
+      // アイビス：超威力・壁＆敵貫通の狙撃砲撃＋着弾大爆発
+      this.onToast('🎯 アイビス狙撃砲撃！！');
+      this.fireAstralCannon(Math.round(dmg * 26.0));
+      const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
+      const blastCenter = this.root.position.clone().addScaledVector(forward, 14);
+      for (const e of [...this.enemyManager.enemies]) {
+        if (e.root.position.distanceTo(blastCenter) <= 7.5) {
+          this.enemyManager.damageEnemy(e, Math.round(dmg * 8.0), {
+            color: 0x00ffff, isCrit: true, stunMs: 2500, attackCategory: 'skill'
+          });
+        }
+      }
     }
   }
 
@@ -1034,7 +1310,7 @@ export class Player {
           const targetPos = nearest.root.position.clone().add(new THREE.Vector3(0, 1.0, 0));
           const toTarget = targetPos.sub(p.mesh.position).normalize();
           const spd = p.vel.length();
-          p.vel.lerp(toTarget.multiplyScalar(spd), 0.14).normalize().multiplyScalar(spd);
+          p.vel.lerp(toTarget.multiplyScalar(spd), p.homingStrength || 0.14).normalize().multiplyScalar(spd);
         }
       }
 
@@ -1098,6 +1374,22 @@ export class Player {
 
       const expired = hitTarget || traveled >= p.maxDist || p.mesh.position.y <= 0;
       if (expired) {
+        if (p.isMeteora) {
+          const r = p.blastRadius || 4.5;
+          this.addCameraShake(0.25, 0.18);
+          for (const e of [...this.enemyManager.enemies]) {
+            if (e.root.position.distanceTo(p.mesh.position) <= r) {
+              this.enemyManager.damageEnemy(e, Math.round(p.dmg * 0.85), {
+                color: 0xff4500, isCrit: true, stunMs: 800, attackCategory: 'skill'
+              });
+            }
+          }
+          for (const box of [...this.world.destructibles]) {
+            if (box.position.distanceTo(p.mesh.position) <= r) {
+              this.world.damageBlock(box, p.dmg);
+            }
+          }
+        }
         this.world.spawnHitSpark(p.mesh.position, p.color);
         this.scene.remove(p.mesh);
         p.mesh.geometry.dispose();
@@ -1202,6 +1494,25 @@ export class Player {
         this.regenAcc -= 1.0;
         const mult = (hasSynergy('absolute_aegis') && this.hp <= mHp * 0.5) ? 2 : 1;
         this.hp = Math.min(mHp, this.hp + regen * mult);
+      }
+    }
+    // トリガーホルダー装備時：毎秒最大HPの0.5%自然回復（トリオン供給）
+    if (this.isTriggerMode() && this.hp < mHp) {
+      this.trionRegenAcc += dt;
+      if (this.trionRegenAcc >= 1.0) {
+        this.trionRegenAcc -= 1.0;
+        const trionHeal = Math.max(1, Math.round(mHp * 0.005));
+        this.hp = Math.min(mHp, this.hp + trionHeal);
+      }
+    }
+
+    // シールドトリガー視覚効果の更新
+    if (this.shieldBubbleMesh) {
+      if (now < this.trionShieldUntil) {
+        this.shieldBubbleMesh.visible = true;
+        this.shieldBubbleMesh.rotation.y += dt * 2.5;
+      } else {
+        this.shieldBubbleMesh.visible = false;
       }
     }
 
