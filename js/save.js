@@ -45,13 +45,6 @@ export const state = {
   ownedTriggers: { kogetsu: 1 } // 開発室倉庫の所持トリガーとレベル（id: lv）
 };
 
-// 動的に切り替わる装備・ゲージ状態
-export const state = {
-  weapon: null,
-  exsGauge: 0,
-  equippedExsId: 'giga_breaker',
-  ownedExs: { giga_breaker: 1 }
-};
 
 // ---- 武器・防具・遺物生成 ----
 const WEAPON_SCALE = { perFloor: 0.12 };
