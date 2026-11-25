@@ -734,7 +734,7 @@ export class UIManager {
           <div class="detail-panel" style="margin-top:10px;">
             ${!selTrig ? `<div class="muted">所持トリガーを選択してください</div>` : `
               <div class="detail-text">
-                <b>${selTrig.name} Lv.${selLv}</b>（威力補正: <b>${100 + (selLv - 1) * 15}%</b>）<br>
+                <b>${selTrig.name} Lv.${selLv}</b>（威力補正: <b>${100 + (selLv - 1) * 20}%</b>）<br>
                 <span style="font-size:11px; color:#cbd5e0;">${selTrig.desc}</span>
               </div>
               <div class="detail-actions">
