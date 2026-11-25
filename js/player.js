@@ -164,17 +164,34 @@ export class Player {
   getTriggerPowerMult(id) {
     const lv = (state.ownedTriggers && state.ownedTriggers[id]) || 1;
     const radarBonus = performance.now() < this.radarUntil ? this.radarAtkMult : 1.0;
-    return (1 + (lv - 1) * 0.15) * radarBonus;
+    return (1 + (lv - 1) * 0.20) * radarBonus;
   }
 
-  consumeTrion(costPct) {
-    const cost = Math.max(1, Math.round(maxHp() * costPct));
+  consumeTrion(costVal) {
+    const cost = Math.max(1, Math.round(costVal));
     if (this.hp <= cost) {
-      this.onToast('⚠️ トリオン不足（ベイルアウト危険域のため発動不可）');
+      this.onToast(`⚠️ トリオン不足（必要: ${cost} / 残り: ${Math.ceil(this.hp)}）`);
       return false;
     }
     this.hp -= cost;
     return true;
+  }
+  // 0.05秒(50ms)のタメ＆トリオンキューブ展開演出後にコールバック実行
+  chargeAndFireTrionCube(color, onFire) {
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.45, 0.45),
+      new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.95 })
+    );
+    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
+    cube.position.copy(this.root.position).add(new THREE.Vector3(0, 1.55, 0)).addScaledVector(forward, 0.75);
+    this.scene.add(cube);
+
+    setTimeout(() => {
+      this.scene.remove(cube);
+      cube.geometry.dispose();
+      cube.material.dispose();
+      if (this.hp > 0) onFire();
+    }, 50);
   }
 
   bindInputs() {
@@ -732,11 +749,18 @@ export class Player {
     this.model.rotation.y = this.yaw;
 
     if (id === 'asteroid') {
-      // アステロイド：3連トリオン弾
-      [-0.08, 0, 0.08].forEach((off, idx) => {
-        setTimeout(() => {
-          this.fireProjectile(off, Math.round(dmg * 0.48), 0x00ffff, { attackCategory: 'ranged' });
-        }, idx * 45);
+      // アステロイド：0.05秒のタメ後、視線方向へ一直線に高速連射（Lv4以上で4連射、Lv8以上で5連射）
+      const shots = 3 + Math.min(2, Math.floor((lv - 1) / 3));
+      this.chargeAndFireTrionCube(0x00ffff, () => {
+        for (let idx = 0; idx < shots; idx++) {
+          setTimeout(() => {
+            this.model.rotation.y = this.yaw;
+            this.fireProjectile(0, Math.round(dmg * 0.48), 0x00ffff, {
+              speedOverride: 1.25,
+              attackCategory: 'ranged'
+            });
+          }, idx * 45);
+        }
       });
     } else if (id === 'raygust') {
       // レイガスト（ブレード）：広範囲薙ぎ払い＋正面の敵弾消去
@@ -791,28 +815,41 @@ export class Player {
     this.model.rotation.y = this.yaw;
 
     if (id === 'viper') {
-      // バイパー：左右に大きく蛇行しながら追尾する変化軌道弾（LvUPで弾数増）
-      const count = Math.min(8, 4 + Math.floor(lv / 2));
-      for (let i = 0; i < count; i++) {
-        const side = i % 2 === 0 ? 1 : -1;
-        const spread = (0.35 + i * 0.08) * side;
-        this.fireProjectile(spread, Math.round(dmg * 0.55), 0x00ffff, {
-          homing: true, homingStrength: 0.24, attackCategory: 'skill'
-        });
-      }
+      // バイパー：0.05秒タメ後、上空へ打ち上がり急降下追尾する曲射弾
+      const count = Math.min(9, 4 + Math.floor(lv / 2));
+      this.chargeAndFireTrionCube(0x00ffff, () => {
+        for (let i = 0; i < count; i++) {
+          const spread = (i - (count - 1) / 2) * 0.14;
+          this.fireProjectile(spread, Math.round(dmg * 0.58), 0x00ffff, {
+            isViperArc: true,
+            arcUpTime: 0.20 + (i % 3) * 0.04,
+            homing: true,
+            homingStrength: 0.30,
+            attackCategory: 'skill'
+          });
+        }
+      });
     } else if (id === 'hound') {
-      // ハウンド：高追尾誘導弾の一斉射撃
-      const count = Math.min(9, 5 + Math.floor(lv / 2));
-      for (let i = 0; i < count; i++) {
-        const off = (i - (count - 1) / 2) * 0.14;
-        this.fireProjectile(off, Math.round(dmg * 0.5), 0x63b3ed, {
-          homing: true, homingStrength: 0.28, attackCategory: 'skill'
-        });
-      }
+      // ハウンド：0.05秒タメ後、高追尾誘導弾を一斉発射
+      const count = Math.min(10, 5 + Math.floor(lv / 2));
+      this.chargeAndFireTrionCube(0x63b3ed, () => {
+        for (let i = 0; i < count; i++) {
+          const off = (i - (count - 1) / 2) * 0.13;
+          this.fireProjectile(off, Math.round(dmg * 0.52), 0x63b3ed, {
+            homing: true,
+            homingStrength: 0.28,
+            attackCategory: 'skill'
+          });
+        }
+      });
     } else if (id === 'meteora') {
-      // メテオラ：着弾大爆発＋周囲吹き飛ばし
-      this.fireProjectile(0, Math.round(dmg * 1.4), 0xff4500, {
-        isMeteora: true, blastRadius: 4.5 + Math.min(2.5, lv * 0.25), attackCategory: 'skill'
+      // メテオラ：0.05秒タメ後、着弾大爆発＋周囲吹き飛ばし
+      this.chargeAndFireTrionCube(0xff4500, () => {
+        this.fireProjectile(0, Math.round(dmg * 1.45), 0xff4500, {
+          isMeteora: true,
+          blastRadius: 4.5 + Math.min(3.0, (lv - 1) * 0.3),
+          attackCategory: 'skill'
+        });
       });
     } else if (id === 'senku') {
       // 旋空弧月：超長距離貫通斬撃波＋近接薙ぎ払い
@@ -1284,9 +1321,15 @@ export class Player {
     mesh.position.copy(this.root.position).add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(dir, 0.8);
     this.scene.add(mesh);
 
+    const spd = opts.speedOverride || w.projSpeed || 0.85;
+    const initVel = dir.multiplyScalar(spd);
+    if (opts.isViperArc) {
+      initVel.y += 0.45; // 斜め上方向へ打ち上げ
+    }
+
     this.projectiles.push({
       mesh,
-      vel: dir.multiplyScalar(w.projSpeed || 0.85),
+      vel: initVel,
       startPos: mesh.position.clone(),
       maxDist: w.range || 28,
       dmg,
@@ -1299,7 +1342,13 @@ export class Player {
 
   updateProjectiles() {
     this.projectiles = this.projectiles.filter((p) => {
-      if (p.homing && this.enemyManager.enemies.length > 0) {
+      
+      this.projectiles = this.projectiles.filter((p) => {
+      if (p.isViperArc && p.arcUpTime > 0) {
+        // 打ち上げフェーズ：上空へ弧を描いて上昇
+        p.arcUpTime -= 0.016;
+        p.vel.y -= 0.015;
+      } else if (p.homing && this.enemyManager.enemies.length > 0) {
         let nearest = null;
         let minD = 999;
         for (const e of this.enemyManager.enemies) {
