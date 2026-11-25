@@ -309,10 +309,6 @@ export class Player {
   // 1. 通常攻撃（仕様準拠）
   // ==========================================
   triggerAttack() {
-    if (this.isTriggerMode()) {
-      this.executeTriggerNormal(dmg, isThird);
-      return;
-    }
     const now = performance.now();
     const w = state.weapon;
     if (!w || now < this.nextAtkTime || now < this.dodgeUntil) return;
@@ -325,6 +321,10 @@ export class Player {
 
     const dmg = atkTotal(this.hp);
     const isThird = this.comboStep === 3;
+    if (this.isTriggerMode()) {
+      this.executeTriggerNormal(dmg, isThird);
+      return;
+    }
 
     // --- 遠距離武器 ---
     if (RANGED_WEAPON_TYPES.includes(w.type)) {
@@ -742,8 +742,9 @@ export class Player {
   executeTriggerNormal(baseDmg, isThird) {
     const id = TRIGGER_SLOTS.normal || 'kogetsu';
     const tr = TRIGGER_LIST[id];
-    if (!tr || !this.consumeTrion(tr.costPct)) return;
+    if (!tr || !this.consumeTrion(tr.cost)) return;
 
+    const lv = (state.ownedTriggers && state.ownedTriggers[id]) || 1;
     const dmg = Math.round(baseDmg * this.getTriggerPowerMult(id));
     this.nextAtkTime = performance.now() + tr.cd;
     this.model.rotation.y = this.yaw;
@@ -791,7 +792,7 @@ export class Player {
     if (!freeCast) {
       const nextTime = sbIdx >= 0 ? this.nextSbTimes[sbIdx] : this[timerProp];
       if (now < nextTime) return;
-      if (!this.consumeTrion(tr.costPct)) return;
+      if (!this.consumeTrion(tr.cost)) return;
 
       const cdCut = Math.min(0.65, (artifactStat('cdPct') + artifactStat('motif_chronos') + (hasSynergy('chronos_overdrive') ? 15 : 0)) / 100);
       const lv = (state.ownedTriggers && state.ownedTriggers[id]) || 1;
@@ -943,7 +944,7 @@ export class Player {
     if (state.exsGauge < EXS_GAUGE_MAX) return;
     const id = TRIGGER_SLOTS.exs || 'ibis';
     const tr = TRIGGER_LIST[id];
-    if (!tr || !this.consumeTrion(tr.costPct)) return;
+    if (!tr || !this.consumeTrion(tr.cost)) return;
 
     state.exsGauge = 0;
     const mult = this.getTriggerPowerMult(id);
@@ -1342,8 +1343,6 @@ export class Player {
 
   updateProjectiles() {
     this.projectiles = this.projectiles.filter((p) => {
-      
-      this.projectiles = this.projectiles.filter((p) => {
       if (p.isViperArc && p.arcUpTime > 0) {
         // 打ち上げフェーズ：上空へ弧を描いて上昇
         p.arcUpTime -= 0.016;
@@ -1355,60 +1354,60 @@ export class Player {
           const d = e.root.position.distanceTo(p.mesh.position);
           if (d < minD) { minD = d; nearest = e; }
         }
-        if (nearest) {
-          const targetPos = nearest.root.position.clone().add(new THREE.Vector3(0, 1.0, 0));
-          const toTarget = targetPos.sub(p.mesh.position).normalize();
-          const spd = p.vel.length();
-          p.vel.lerp(toTarget.multiplyScalar(spd), p.homingStrength || 0.14).normalize().multiplyScalar(spd);
-        }
       }
+      if (nearest) {
+        const targetPos = nearest.root.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+        const toTarget = targetPos.sub(p.mesh.position).normalize();
+        const spd = p.vel.length();
+        p.vel.lerp(toTarget.multiplyScalar(spd), p.homingStrength || 0.14).normalize().multiplyScalar(spd);
+     }
+    }
 
-      p.mesh.position.add(p.vel);
-      const traveled = p.mesh.position.distanceTo(p.startPos);
+    p.mesh.position.add(p.vel);
+    const traveled = p.mesh.position.distanceTo(p.startPos);
+    let hitTarget = false;
+    for (const enemy of [...this.enemyManager.enemies]) {
+      if (p.hitSet.has(enemy)) continue;
+      const hitR = 0.85 * enemy.scale;
+      if (Math.hypot(p.mesh.position.x - enemy.root.position.x, p.mesh.position.z - enemy.root.position.z) < hitR &&
+        p.mesh.position.y >= 0 && p.mesh.position.y <= 2.3 * enemy.scale) {
+        p.hitSet.add(enemy);
+        let finalDmg = p.dmg;
 
-      let hitTarget = false;
-      for (const enemy of [...this.enemyManager.enemies]) {
-        if (p.hitSet.has(enemy)) continue;
-        const hitR = 0.85 * enemy.scale;
-        if (Math.hypot(p.mesh.position.x - enemy.root.position.x, p.mesh.position.z - enemy.root.position.z) < hitR &&
-            p.mesh.position.y >= 0 && p.mesh.position.y <= 2.3 * enemy.scale) {
-          p.hitSet.add(enemy);
-          let finalDmg = p.dmg;
-
-          if (p.isChronosArrow) {
-            const ratio = Math.min(1, traveled / 25);
-            const maxBonus = hasSynergy('awake_chronos') ? 1.5 : 0.6;
-            finalDmg = Math.round(p.dmg * (1 + maxBonus * ratio));
-            const gain = Math.round((8 + 8 * ratio) * (hasSynergy('awake_chronos') ? 1.5 : 1));
-            this.chronosGauge = Math.min(100, this.chronosGauge + gain);
-          }
-          if (p.starPerHit) {
-            this.starGauge = Math.min(100, this.starGauge + p.starPerHit);
-          }
-          if (p.isBitLaser && !hasSynergy('awake_astral')) {
-            this.starGauge = Math.max(0, this.starGauge - 5);
-          }
-          if (this.timeStopHits.has(enemy)) {
-            this.timeStopHits.set(enemy, this.timeStopHits.get(enemy) + 1);
-          }
-
-          this.enemyManager.damageEnemy(enemy, finalDmg, {
-            color: p.color, attackCategory: p.attackCategory, playerPos: this.root.position, playerRef: this
-          });
-          state.exsGauge = Math.min(EXS_GAUGE_MAX, state.exsGauge + 6);
-          if (!p.pierce) { hitTarget = true; break; }
+        if (p.isChronosArrow) {
+          const ratio = Math.min(1, traveled / 25);
+          const maxBonus = hasSynergy('awake_chronos') ? 1.5 : 0.6;
+          finalDmg = Math.round(p.dmg * (1 + maxBonus * ratio));
+          const gain = Math.round((8 + 8 * ratio) * (hasSynergy('awake_chronos') ? 1.5 : 1));
+          this.chronosGauge = Math.min(100, this.chronosGauge + gain);
+         }
+         if (p.starPerHit) {
+          this.starGauge = Math.min(100, this.starGauge + p.starPerHit);
         }
-      }
+        if (p.isBitLaser && !hasSynergy('awake_astral')) {
+          this.starGauge = Math.max(0, this.starGauge - 5);
+        }
+        if (this.timeStopHits.has(enemy)) {
+          this.timeStopHits.set(enemy, this.timeStopHits.get(enemy) + 1);
+        }
 
-      if (!hitTarget) {
-        for (const wall of this.world.walls) {
-          if (p.hitSet.has(wall)) continue;
-          const hx = wall.userData.halfX || 1.0;
-          const hy = wall.userData.halfY || 1.0;
-          const hz = wall.userData.halfZ || 1.0;
-          if (Math.abs(p.mesh.position.x - wall.position.x) < hx + 0.15 &&
-              Math.abs(p.mesh.position.y - wall.position.y) < hy + 0.15 &&
-              Math.abs(p.mesh.position.z - wall.position.z) < hz + 0.15) {
+        this.enemyManager.damageEnemy(enemy, finalDmg, {
+          color: p.color, attackCategory: p.attackCategory, playerPos: this.root.position, playerRef: this
+        });
+        state.exsGauge = Math.min(EXS_GAUGE_MAX, state.exsGauge + 6);
+        if (!p.pierce) { hitTarget = true; break; }
+      }
+    }
+
+    if (!hitTarget) {
+      for (const wall of this.world.walls) {
+        if (p.hitSet.has(wall)) continue;
+        const hx = wall.userData.halfX || 1.0;
+        const hy = wall.userData.halfY || 1.0;
+        const hz = wall.userData.halfZ || 1.0;
+        if (Math.abs(p.mesh.position.x - wall.position.x) < hx + 0.15 &&
+            Math.abs(p.mesh.position.y - wall.position.y) < hy + 0.15 &&
+            Math.abs(p.mesh.position.z - wall.position.z) < hz + 0.15) {
             p.hitSet.add(wall);
             if (wall.userData.destructible) {
               this.world.damageBlock(wall, p.dmg);
