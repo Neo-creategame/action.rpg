@@ -1354,7 +1354,7 @@ export class Player {
           const d = e.root.position.distanceTo(p.mesh.position);
           if (d < minD) { minD = d; nearest = e; }
         }
-      }
+      
       if (nearest) {
         const targetPos = nearest.root.position.clone().add(new THREE.Vector3(0, 1.0, 0));
         const toTarget = targetPos.sub(p.mesh.position).normalize();
