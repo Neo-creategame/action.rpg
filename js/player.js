@@ -176,22 +176,58 @@ export class Player {
     this.hp -= cost;
     return true;
   }
-  // 0.05秒(50ms)のタメ＆トリオンキューブ展開演出後にコールバック実行
-  chargeAndFireTrionCube(color, onFire) {
-    const cube = new THREE.Mesh(
-      new THREE.BoxGeometry(0.45, 0.45, 0.45),
-      new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.95 })
-    );
+  // side: 'right'（右側：アステロイド） / 'left'（左側：バイパー・ハウンド・メテオラ等）
+  // ① 3×3×3（27分割）トリオンキューブ展開演出（0.05秒）後に各小キューブ座標を渡して発射
+  chargeAndFireTrionCube(color, side, onFire) {
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
-    cube.position.copy(this.root.position).add(new THREE.Vector3(0, 1.55, 0)).addScaledVector(forward, 0.75);
-    this.scene.add(cube);
+    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).normalize();
+    const sideSign = side === 'right' ? 1 : -1;
 
+    const centerPos = this.root.position.clone()
+      .add(new THREE.Vector3(0, 1.55, 0))
+      .addScaledVector(forward, 0.75)
+      .addScaledVector(right, 0.68 * sideSign);
+
+    const group = new THREE.Group();
+    group.position.copy(centerPos);
+    group.rotation.y = this.yaw;
+
+    // 3×3×3 の27個に分割された小キューブを生成
+    const subGeo = new THREE.BoxGeometry(0.11, 0.11, 0.11);
+    const subMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 });
+    const edgeGeo = new THREE.EdgesGeometry(subGeo);
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+
+    const subPositions = [];
+    const gap = 0.14;
+    for (let x = -1; x <= 1; x++) {
+      for (let y = -1; y <= 1; y++) {
+        for (let z = -1; z <= 1; z++) {
+          const cell = new THREE.Mesh(subGeo, subMat);
+          cell.position.set(x * gap, y * gap, z * gap);
+          cell.add(new THREE.LineSegments(edgeGeo, edgeMat));
+          group.add(cell);
+
+          // 発射時に小弾が飛び出すワールド座標を記録
+          const worldCellPos = centerPos.clone()
+            .addScaledVector(right, x * gap)
+            .add(new THREE.Vector3(0, y * gap, 0))
+            .addScaledVector(forward, z * gap);
+          subPositions.push(worldCellPos);
+        }
+      }
+    }
+    this.scene.add(group);
+
+    // 0.05秒後にキューブが弾けて各小弾位置から射出
     setTimeout(() => {
-      this.scene.remove(cube);
-      cube.geometry.dispose();
-      cube.material.dispose();
-      if (this.hp > 0) onFire();
-    }, 50);
+      this.scene.remove(group);
+      subGeo.dispose();
+      subMat.dispose();
+      edgeGeo.dispose();
+      edgeMat.dispose();
+      if (this.hp > 0) onFire(centerPos.clone(), subPositions);
+    }, 500);
   }
 
   bindInputs() {
@@ -749,18 +785,22 @@ export class Player {
     this.nextAtkTime = performance.now() + tr.cd;
     this.model.rotation.y = this.yaw;
 
+    // アステロイド：分割された小キューブの各位置から小弾が束になって一直線に飛ぶ
     if (id === 'asteroid') {
-      // アステロイド：0.05秒のタメ後、視線方向へ一直線に高速連射（Lv4以上で4連射、Lv8以上で5連射）
       const shots = 3 + Math.min(2, Math.floor((lv - 1) / 3));
-      this.chargeAndFireTrionCube(0x00ffff, () => {
+      this.chargeAndFireTrionCube(0x00ffff, 'right', (cubePos, subPositions) => {
         for (let idx = 0; idx < shots; idx++) {
           setTimeout(() => {
             this.model.rotation.y = this.yaw;
+            const origin = subPositions[idx % subPositions.length] || cubePos;
             this.fireProjectile(0, Math.round(dmg * 0.48), 0x00ffff, {
-              speedOverride: 1.25,
+              originPos: origin,
+              projRadius: 0.14,
+              speedOverride: 1.35,
+              maxDist: 34,
               attackCategory: 'ranged'
             });
-          }, idx * 45);
+          }, idx * 35);
         }
       });
     } else if (id === 'raygust') {
@@ -815,40 +855,49 @@ export class Player {
     const dmg = Math.round(atkTotal(this.hp) * mult);
     this.model.rotation.y = this.yaw;
 
+    // バイパー・ハウンド・メテオラも同様に subPositions から射出
     if (id === 'viper') {
-      // バイパー：0.05秒タメ後、上空へ打ち上がり急降下追尾する曲射弾
       const count = Math.min(9, 4 + Math.floor(lv / 2));
-      this.chargeAndFireTrionCube(0x00ffff, () => {
+      this.chargeAndFireTrionCube(0x00ffff, 'left', (cubePos, subPositions) => {
         for (let i = 0; i < count; i++) {
           const spread = (i - (count - 1) / 2) * 0.14;
+          const origin = subPositions[(i * 3) % subPositions.length] || cubePos;
           this.fireProjectile(spread, Math.round(dmg * 0.58), 0x00ffff, {
+            originPos: origin,
+            projRadius: 0.15,
             isViperArc: true,
             arcUpTime: 0.20 + (i % 3) * 0.04,
             homing: true,
             homingStrength: 0.30,
+            maxDist: 36,
             attackCategory: 'skill'
           });
         }
       });
     } else if (id === 'hound') {
-      // ハウンド：0.05秒タメ後、高追尾誘導弾を一斉発射
       const count = Math.min(10, 5 + Math.floor(lv / 2));
-      this.chargeAndFireTrionCube(0x63b3ed, () => {
+      this.chargeAndFireTrionCube(0x63b3ed, 'left', (cubePos, subPositions) => {
         for (let i = 0; i < count; i++) {
           const off = (i - (count - 1) / 2) * 0.13;
+          const origin = subPositions[(i * 3) % subPositions.length] || cubePos;
           this.fireProjectile(off, Math.round(dmg * 0.52), 0x63b3ed, {
+            originPos: origin,
+            projRadius: 0.15,
             homing: true,
             homingStrength: 0.28,
+            maxDist: 36,
             attackCategory: 'skill'
           });
         }
       });
     } else if (id === 'meteora') {
-      // メテオラ：0.05秒タメ後、着弾大爆発＋周囲吹き飛ばし
-      this.chargeAndFireTrionCube(0xff4500, () => {
+      this.chargeAndFireTrionCube(0xff4500, 'left', (cubePos) => {
         this.fireProjectile(0, Math.round(dmg * 1.45), 0xff4500, {
+          originPos: cubePos,
+          projRadius: 0.24,
           isMeteora: true,
           blastRadius: 4.5 + Math.min(3.0, (lv - 1) * 0.3),
+          maxDist: 30,
           attackCategory: 'skill'
         });
       });
@@ -1315,12 +1364,36 @@ export class Player {
       -Math.cos(ang) * Math.cos(pitchFactor)
     ).normalize();
 
+    const radius = opts.projRadius || 0.22;
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22, 8, 8),
+      new THREE.SphereGeometry(radius, 8, 8),
       new THREE.MeshBasicMaterial({ color })
     );
-    mesh.position.copy(this.root.position).add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(dir, 0.8);
+    if (opts.originPos) {
+      mesh.position.copy(opts.originPos);
+    } else {
+      mesh.position.copy(this.root.position).add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(dir, 0.8);
+    }
     this.scene.add(mesh);
+
+    const spd = opts.speedOverride || w.projSpeed || 0.85;
+    const initVel = dir.multiplyScalar(spd);
+    if (opts.isViperArc) {
+      initVel.y += 0.45;
+    }
+
+    const defaultRange = this.isTriggerMode() ? 32 : (w.range || 28);
+    this.projectiles.push({
+      mesh,
+      vel: initVel,
+      startPos: mesh.position.clone(),
+      maxDist: opts.maxDist || defaultRange,
+      dmg,
+      color,
+      hitSet: new Set(),
+      attackCategory: opts.attackCategory || 'ranged',
+      ...opts
+    });
 
     const spd = opts.speedOverride || w.projSpeed || 0.85;
     const initVel = dir.multiplyScalar(spd);
