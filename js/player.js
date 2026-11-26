@@ -176,7 +176,7 @@ export class Player {
     this.hp -= cost;
     return true;
   }
-  // side: 'right'（右側：アステロイド） / 'left'（左側：バイパー・ハウンド・メテオラ等）
+  
   // ① 3×3×3（27分割）トリオンキューブ展開演出（0.05秒）後に各小キューブ座標を渡して発射
   chargeAndFireTrionCube(color, side, onFire) {
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
@@ -891,15 +891,28 @@ export class Player {
         }
       });
     } else if (id === 'meteora') {
-      this.chargeAndFireTrionCube(0xff4500, 'left', (cubePos) => {
-        this.fireProjectile(0, Math.round(dmg * 1.45), 0xff4500, {
-          originPos: cubePos,
-          projRadius: 0.24,
-          isMeteora: true,
-          blastRadius: 4.5 + Math.min(3.0, (lv - 1) * 0.3),
-          maxDist: 30,
-          attackCategory: 'skill'
-        });
+      // メテオラ：0.05秒タメ後、斜方投射の炸裂弾を連続散布して広範囲を絨毯爆撃
+      const count = Math.min(12, 5 + Math.floor(lv * 0.8));
+      const blastR = 3.6 + Math.min(2.4, (lv - 1) * 0.25);
+      const subDmg = Math.round(dmg * 0.52);
+
+      this.chargeAndFireTrionCube(0xff4500, 'left', (cubePos, subPositions) => {
+        for (let i = 0; i < count; i++) {
+          setTimeout(() => {
+            if (this.hp <= 0) return;
+            const spreadYaw = ((i % 5) - 2) * 0.13 + (Math.random() - 0.5) * 0.08;
+            const origin = subPositions[(i * 2) % subPositions.length] || cubePos;
+            this.fireProjectile(spreadYaw, subDmg, 0xff4500, {
+              originPos: origin,
+              projRadius: 0.17,
+              speedOverride: 1.0 + (i % 3) * 0.15, // 初速を少し散らして奥行き方向にも着弾させる
+              isMeteoraBomb: true,
+              blastRadius: blastR,
+              maxDist: 45,
+              attackCategory: 'skill'
+            });
+          }, i * 28);
+        }
       });
     } else if (id === 'senku') {
       // 旋空弧月：超長距離貫通斬撃波＋近接薙ぎ払い
@@ -1395,10 +1408,18 @@ export class Player {
       ...opts
     });
 
-    //const spd = opts.speedOverride || w.projSpeed || 0.85;
-    //const initVel = dir.multiplyScalar(spd);
-    if (opts.isViperArc) {
-      initVel.y += 0.45; // 斜め上方向へ打ち上げ
+    if (opts.isMeteoraBomb) {
+      // ホーミングなしの斜方投射：カメラの上下角(pitch)で飛距離を調整可能
+      const elev = Math.max(0.25, Math.min(1.05, 0.55 - this.pitch * 0.55));
+      const v0 = opts.speedOverride || 1.15;
+      const horizDir = new THREE.Vector3(-Math.sin(ang), 0, -Math.cos(ang)).normalize();
+      initVel = horizDir.multiplyScalar(v0 * Math.cos(elev));
+      initVel.y = v0 * Math.sin(elev);
+    } else {
+      initVel = dir.multiplyScalar(spd);
+      if (opts.isViperArc) {
+        initVel.y += 0.45;
+      }
     }
 
     this.projectiles.push({
@@ -1436,41 +1457,63 @@ export class Player {
      }
     }
 
-    p.mesh.position.add(p.vel);
-    const traveled = p.mesh.position.distanceTo(p.startPos);
-    let hitTarget = false;
-    for (const enemy of [...this.enemyManager.enemies]) {
-      if (p.hitSet.has(enemy)) continue;
-      const hitR = 0.85 * enemy.scale;
-      if (Math.hypot(p.mesh.position.x - enemy.root.position.x, p.mesh.position.z - enemy.root.position.z) < hitR &&
-        p.mesh.position.y >= 0 && p.mesh.position.y <= 2.3 * enemy.scale) {
-        p.hitSet.add(enemy);
-        let finalDmg = p.dmg;
-
-        if (p.isChronosArrow) {
-          const ratio = Math.min(1, traveled / 25);
-          const maxBonus = hasSynergy('awake_chronos') ? 1.5 : 0.6;
-          finalDmg = Math.round(p.dmg * (1 + maxBonus * ratio));
-          const gain = Math.round((8 + 8 * ratio) * (hasSynergy('awake_chronos') ? 1.5 : 1));
-          this.chronosGauge = Math.min(100, this.chronosGauge + gain);
-         }
-         if (p.starPerHit) {
-          this.starGauge = Math.min(100, this.starGauge + p.starPerHit);
+    if (p.isMeteoraBomb) {
+        // 斜方投射の重力加速度（放物線軌道）
+        p.vel.y -= 0.022;
+      } else if (p.isViperArc && p.arcUpTime > 0) {
+        // 打ち上げフェーズ：上空へ弧を描いて上昇
+        p.arcUpTime -= 0.016;
+        p.vel.y -= 0.015;
+      } else if (p.homing && this.enemyManager.enemies.length > 0) {
+        let nearest = null;
+        let minD = 999;
+        for (const e of this.enemyManager.enemies) {
+          const d = e.root.position.distanceTo(p.mesh.position);
+          if (d < minD) { minD = d; nearest = e; }
         }
-        if (p.isBitLaser && !hasSynergy('awake_astral')) {
-          this.starGauge = Math.max(0, this.starGauge - 5);
+        if (nearest) {
+          const targetPos = nearest.root.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+          const toTarget = targetPos.sub(p.mesh.position).normalize();
+          const spd = p.vel.length();
+          p.vel.lerp(toTarget.multiplyScalar(spd), p.homingStrength || 0.14).normalize().multiplyScalar(spd);
         }
-        if (this.timeStopHits.has(enemy)) {
-          this.timeStopHits.set(enemy, this.timeStopHits.get(enemy) + 1);
-        }
-
-        this.enemyManager.damageEnemy(enemy, finalDmg, {
-          color: p.color, attackCategory: p.attackCategory, playerPos: this.root.position, playerRef: this
-        });
-        state.exsGauge = Math.min(EXS_GAUGE_MAX, state.exsGauge + 6);
-        if (!p.pierce) { hitTarget = true; break; }
       }
-    }
+
+      p.mesh.position.add(p.vel);
+      const traveled = p.mesh.position.distanceTo(p.startPos);
+      let hitTarget = false;
+      for (const enemy of [...this.enemyManager.enemies]) {
+        if (p.hitSet.has(enemy)) continue;
+        const hitR = 0.85 * enemy.scale;
+        if (Math.hypot(p.mesh.position.x - enemy.root.position.x, p.mesh.position.z - enemy.root.position.z) < hitR &&
+            p.mesh.position.y >= 0 && p.mesh.position.y <= 2.3 * enemy.scale) {
+          p.hitSet.add(enemy);
+          let finalDmg = p.dmg;
+
+          if (p.isChronosArrow) {
+            const ratio = Math.min(1, traveled / 25);
+            const maxBonus = hasSynergy('awake_chronos') ? 1.5 : 0.6;
+            finalDmg = Math.round(p.dmg * (1 + maxBonus * ratio));
+            const gain = Math.round((8 + 8 * ratio) * (hasSynergy('awake_chronos') ? 1.5 : 1));
+            this.chronosGauge = Math.min(100, this.chronosGauge + gain);
+          }
+          if (p.starPerHit) {
+            this.starGauge = Math.min(100, this.starGauge + p.starPerHit);
+          }
+          if (p.isBitLaser && !hasSynergy('awake_astral')) {
+            this.starGauge = Math.max(0, this.starGauge - 5);
+          }
+          if (this.timeStopHits.has(enemy)) {
+            this.timeStopHits.set(enemy, this.timeStopHits.get(enemy) + 1);
+          }
+
+          this.enemyManager.damageEnemy(enemy, finalDmg, {
+            color: p.color, attackCategory: p.attackCategory, playerPos: this.root.position, playerRef: this
+          });
+          state.exsGauge = Math.min(EXS_GAUGE_MAX, state.exsGauge + 6);
+          if (!p.pierce) { hitTarget = true; break; }
+        }
+      }
 
     if (!hitTarget) {
       for (const wall of this.world.walls) {
@@ -1495,13 +1538,23 @@ export class Player {
 
       const expired = hitTarget || traveled >= p.maxDist || p.mesh.position.y <= 0;
       if (expired) {
-        if (p.isMeteora) {
-          const r = p.blastRadius || 4.5;
-          this.addCameraShake(0.25, 0.18);
+        if (p.isMeteora || p.isMeteoraBomb) {
+          const r = p.blastRadius || 4.0;
+          this.addCameraShake(p.isMeteoraBomb ? 0.14 : 0.25, p.isMeteoraBomb ? 0.10 : 0.18);
+
+          // 爆発球エフェクトの描画
+          const blastMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(r * 0.65, 12, 12),
+            new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.75 })
+          );
+          blastMesh.position.copy(p.mesh.position);
+          this.scene.add(blastMesh);
+          this.slashEffects.push({ mesh: blastMesh, life: 0.22, maxLife: 0.22 });
+
           for (const e of [...this.enemyManager.enemies]) {
             if (e.root.position.distanceTo(p.mesh.position) <= r) {
               this.enemyManager.damageEnemy(e, Math.round(p.dmg * 0.85), {
-                color: 0xff4500, isCrit: true, stunMs: 800, attackCategory: 'skill'
+                color: 0xff4500, isCrit: true, stunMs: 600, attackCategory: 'skill'
               });
             }
           }
