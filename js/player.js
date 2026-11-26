@@ -1395,7 +1395,7 @@ export class Player {
       ...opts
     });
 
-    const spd = opts.speedOverride || w.projSpeed || 0.85;
+    //const spd = opts.speedOverride || w.projSpeed || 0.85;
     const initVel = dir.multiplyScalar(spd);
     if (opts.isViperArc) {
       initVel.y += 0.45; // 斜め上方向へ打ち上げ
